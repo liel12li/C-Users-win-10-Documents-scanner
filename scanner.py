@@ -189,6 +189,16 @@ def _finviz(filters: dict) -> list:
         s.set_filter(filters_dict=filters)
         df = s.screener_view()
         if df is not None and len(df) > 0:
+            # Sort by relative volume (highest activity first) so that the
+            # max_stocks cap keeps the most interesting stocks, not A-Z first.
+            for col in ("Rel Volume", "Volume", "Avg Volume"):
+                if col in df.columns:
+                    try:
+                        df[col] = pd.to_numeric(df[col].astype(str).str.replace(",", ""), errors="coerce")
+                        df = df.sort_values(col, ascending=False)
+                        break
+                    except Exception:
+                        pass
             return df["Ticker"].tolist()
     except Exception as e:
         log.warning(f"Finviz failed: {e}")
