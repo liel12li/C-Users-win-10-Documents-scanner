@@ -288,45 +288,96 @@ class SettingsWindow(tk.Toplevel):
 
     def __init__(self, parent, cfg: dict, on_save):
         super().__init__(parent)
-        self.title("Settings")
+        self.title("⚙  Settings")
         self.configure(bg=BG)
-        self.resizable(False, True)
-        self.grab_set()
+        self.resizable(True, True)
         self.on_save = on_save
         self.cfg = cfg
 
-        _lbl(self, "Scanner Settings", size=14, bold=True).pack(pady=(16, 2))
+        # Release grab if window is destroyed unexpectedly
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        try:
+            self._build_content()
+        except Exception as exc:
+            # Show error instead of freezing the parent
+            _lbl(self, f"Error building settings:\n{exc}", size=10, color="#ff4466").pack(padx=20, pady=20)
+            tk.Button(self, text="Close", command=self._on_close,
+                      bg=BG3, fg=TEXT, relief="flat", padx=14, pady=6).pack(pady=8)
+
+        # Centre on screen
+        self.update_idletasks()
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        w, h   = max(self.winfo_width(), 560), min(self.winfo_height(), sh - 80)
+        self.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
+
+        self.grab_set()
+
+    def _on_close(self):
+        try:
+            self.grab_release()
+        except Exception:
+            pass
+        self.destroy()
+
+    def _build_content(self):
+        _lbl(self, "Scanner Settings", size=14, bold=True).pack(pady=(14, 2))
         _lbl(self, "Changes apply on the next run", size=9, color=MUTED).pack()
 
         # ── Notebook tabs ─────────────────────────────────────────────────────
         style = ttk.Style()
         style.theme_use("default")
-        style.configure("TNotebook",       background=BG, borderwidth=0)
-        style.configure("TNotebook.Tab",   background=BG3, foreground=MUTED,
+        style.configure("TNotebook",     background=BG, borderwidth=0)
+        style.configure("TNotebook.Tab", background=BG3, foreground=MUTED,
                         padding=[12, 5], font=("Segoe UI", 10))
         style.map("TNotebook.Tab",
                   background=[("selected", BG2)], foreground=[("selected", TEXT)])
 
         nb = ttk.Notebook(self)
-        nb.pack(fill="both", expand=True, padx=12, pady=10)
+        nb.pack(fill="both", expand=True, padx=10, pady=8)
 
-        tab1 = tk.Frame(nb, bg=BG)
-        tab2 = tk.Frame(nb, bg=BG)
-        tab3 = tk.Frame(nb, bg=BG)
-        nb.add(tab1, text=" Universe ")
-        nb.add(tab2, text=" Filters ")
-        nb.add(tab3, text=" Weights ")
+        for label, builder in [
+            (" Universe ", self._build_universe_tab),
+            (" Filters ",  self._build_filters_tab),
+            (" Weights ",  self._build_weights_tab),
+        ]:
+            # Wrap each tab in a scrollable canvas
+            outer = tk.Frame(nb, bg=BG)
+            nb.add(outer, text=label)
 
-        self._build_universe_tab(tab1)
-        self._build_filters_tab(tab2)
-        self._build_weights_tab(tab3)
+            canvas = tk.Canvas(outer, bg=BG, highlightthickness=0)
+            vsb    = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+            canvas.configure(yscrollcommand=vsb.set)
+            vsb.pack(side="right", fill="y")
+            canvas.pack(side="left", fill="both", expand=True)
+
+            inner = tk.Frame(canvas, bg=BG)
+            win_id = canvas.create_window((0, 0), window=inner, anchor="nw")
+
+            def _on_resize(evt, c=canvas, wid=win_id):
+                c.itemconfig(wid, width=evt.width)
+            canvas.bind("<Configure>", _on_resize)
+
+            def _on_content(evt, c=canvas):
+                c.configure(scrollregion=c.bbox("all"))
+            inner.bind("<Configure>", _on_content)
+
+            # Mouse-wheel scroll
+            def _wheel(evt, c=canvas):
+                c.yview_scroll(int(-1 * (evt.delta / 120)), "units")
+            canvas.bind_all("<MouseWheel>", _wheel)
+
+            try:
+                builder(inner)
+            except Exception as exc:
+                _lbl(inner, f"Error: {exc}", size=9, color="#ff4466").pack(padx=10, pady=6)
 
         # ── Save ──────────────────────────────────────────────────────────────
         tk.Button(self, text="  ✓  Save Settings  ",
                   font=("Segoe UI", 11, "bold"),
                   bg=ACCENT, fg="white", activebackground="#009944",
                   relief="flat", padx=20, pady=8, cursor="hand2",
-                  command=self._save).pack(pady=14)
+                  command=self._save).pack(pady=10)
 
     # ── Tab 1: Universe ───────────────────────────────────────────────────────
     def _build_universe_tab(self, tab):
@@ -582,15 +633,7 @@ class App:
 
         self._scanning = False
         self._log_handler: logging.Handler | None = None
-
-        # Start the live price server in the background
-        try:
-            from scanner import start_price_server, PRICE_PORT
-            ok = start_price_server()
-            self._server_port = PRICE_PORT if ok else None
-        except Exception:
-            self._server_port = None
-
+        self._server_started = False
         self._build()
 
     # ── Layout ────────────────────────────────────────────────────────────────
@@ -703,12 +746,17 @@ class App:
 
             if top:
                 generate_dashboard(top)
-                # Pre-populate live price cache with scan data
+                # Start price server + pre-fill cache (first time only)
                 try:
-                    from scanner import prefill_price_cache, _background_refresh
+                    from scanner import (start_price_server, prefill_price_cache,
+                                         _background_refresh)
+                    if not self._server_started:
+                        start_price_server()
+                        self._server_started = True
                     prefill_price_cache(top)
                     syms = [s["ticker"] for s in top]
-                    threading.Thread(target=_background_refresh, args=(syms,), daemon=True).start()
+                    threading.Thread(target=_background_refresh,
+                                     args=(syms,), daemon=True).start()
                 except Exception:
                     pass
                 self.root.after(0, self._done_ok)
