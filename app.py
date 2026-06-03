@@ -3,6 +3,31 @@
 
 import os
 import sys
+import subprocess
+import importlib
+
+# ── Auto-install missing packages BEFORE any other import ────────────────────
+_REQUIRED = ["numpy", "pandas", "yfinance", "requests", "bs4", "lxml", "finvizfinance"]
+
+def _ensure_deps():
+    missing = []
+    for pkg in _REQUIRED:
+        try:
+            importlib.import_module(pkg)
+        except ImportError:
+            missing.append(pkg)
+    if missing:
+        print(f"Installing missing packages: {', '.join(missing)} …")
+        req = os.path.join(os.path.dirname(__file__), "requirements.txt")
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "-r", req, "-q"],
+            stdout=subprocess.DEVNULL,
+        )
+        print("Done.")
+
+_ensure_deps()
+# ─────────────────────────────────────────────────────────────────────────────
+
 import threading
 import logging
 import webbrowser
