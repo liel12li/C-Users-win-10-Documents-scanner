@@ -198,25 +198,119 @@ class SettingsWindow(tk.Toplevel):
             cb.grid(row=i // 2, column=i % 2, sticky="w", padx=4, pady=1)
 
     # ── Tab 2: Filters ────────────────────────────────────────────────────────
+
+    # Preset price ranges  (label → (min, max))
+    PRICE_PRESETS = {
+        "All prices":      (0,    999999),
+        "Under $20":       (0,    20),
+        "$5 – $50":        (5,    50),
+        "$20 – $100":      (20,   100),
+        "$50 – $200":      (50,   200),
+        "$100 – $500":     (100,  500),
+        "$200 – $1,000":   (200,  1000),
+        "$500+":           (500,  999999),
+        "Custom…":         None,
+    }
+
     def _build_filters_tab(self, tab):
         pf = self.cfg["pre_filters"]
 
+        # ── RSI ───────────────────────────────────────────────────────────────
         _section(tab, "RSI Range")
         self.rsi_min_var = tk.DoubleVar(value=pf.get("rsi_min", 20))
         self.rsi_max_var = tk.DoubleVar(value=pf.get("rsi_max", 85))
-        _row(tab, "RSI minimum",  lambda f: _spin(f, self.rsi_min_var, 0, 100))
-        _row(tab, "RSI maximum",  lambda f: _spin(f, self.rsi_max_var, 0, 100))
+        _row(tab, "RSI minimum", lambda f: _spin(f, self.rsi_min_var, 0, 100))
+        _row(tab, "RSI maximum", lambda f: _spin(f, self.rsi_max_var, 0, 100))
 
-        _section(tab, "Price Range")
+        # ── Price Range ───────────────────────────────────────────────────────
+        _section(tab, "Price Range  ($)")
+
         self.minprice_var = tk.DoubleVar(value=pf.get("min_price", 5))
         self.maxprice_var = tk.DoubleVar(value=pf.get("max_price", 5000))
-        _row(tab, "Min price ($)",  lambda f: _spin(f, self.minprice_var, 0, 10000, 5))
-        _row(tab, "Max price ($)",  lambda f: _spin(f, self.maxprice_var, 0, 50000, 100))
 
+        # Detect current preset
+        cur_min = pf.get("min_price", 5)
+        cur_max = pf.get("max_price", 5000)
+        default_preset = "Custom…"
+        for label, rng in self.PRICE_PRESETS.items():
+            if rng and rng[0] == cur_min and rng[1] == cur_max:
+                default_preset = label
+                break
+
+        # Quick-select buttons row
+        btn_outer = tk.Frame(tab, bg=BG)
+        btn_outer.pack(fill="x", padx=18, pady=(4, 2))
+        _lbl(btn_outer, "Quick select:", size=9, color=MUTED, bg=BG).pack(anchor="w", pady=(0, 4))
+
+        btn_frame = tk.Frame(btn_outer, bg=BG)
+        btn_frame.pack(anchor="w")
+
+        self._price_preset_var = tk.StringVar(value=default_preset)
+        self._price_btns: list[tk.Button] = []
+
+        def _apply_preset(label):
+            self._price_preset_var.set(label)
+            rng = self.PRICE_PRESETS[label]
+            if rng:
+                self.minprice_var.set(rng[0])
+                self.maxprice_var.set(rng[1])
+                self._custom_frame.pack_forget()
+            else:
+                self._custom_frame.pack(fill="x", padx=18, pady=2)
+            # Redraw button colours
+            for b in self._price_btns:
+                active = b.cget("text") == label
+                b.config(
+                    bg=ACCENT if active else BG3,
+                    fg="white" if active else MUTED,
+                )
+
+        # Two rows of buttons (4 per row)
+        labels = list(self.PRICE_PRESETS.keys())
+        for i, label in enumerate(labels):
+            row_frame = btn_frame if i < 4 else None
+            if i == 4:
+                row_frame = tk.Frame(btn_outer, bg=BG)
+                row_frame.pack(anchor="w", pady=(2, 0))
+                btn_frame2 = row_frame
+            if i >= 4:
+                row_frame = btn_frame2
+            else:
+                row_frame = btn_frame
+
+            active = label == default_preset
+            b = tk.Button(
+                row_frame,
+                text=label,
+                font=("Segoe UI", 9),
+                bg=ACCENT if active else BG3,
+                fg="white" if active else MUTED,
+                activebackground=ACCENT,
+                relief="flat", padx=8, pady=5, cursor="hand2",
+                command=lambda l=label: _apply_preset(l),
+            )
+            b.pack(side="left", padx=3, pady=1)
+            self._price_btns.append(b)
+
+        # Custom fields (shown only when "Custom…" selected)
+        self._custom_frame = tk.Frame(tab, bg=BG)
+        if default_preset == "Custom…":
+            self._custom_frame.pack(fill="x", padx=18, pady=2)
+
+        cf = self._custom_frame
+        row_f = tk.Frame(cf, bg=BG)
+        row_f.pack(fill="x", pady=2)
+        _lbl(row_f, "Min ($)", size=9, width=10, color=TEXT, bg=BG).pack(side="left")
+        _spin(row_f, self.minprice_var, 0, 99999, 5).pack(side="left", padx=(0, 20))
+        _lbl(row_f, "Max ($)", size=9, width=10, color=TEXT, bg=BG).pack(side="left")
+        _spin(row_f, self.maxprice_var, 0, 99999, 50).pack(side="left")
+
+        # ── Volume ────────────────────────────────────────────────────────────
         _section(tab, "Volume")
         self.minrv_var = tk.DoubleVar(value=pf.get("min_rel_volume", 0.3))
         _row(tab, "Min relative volume", lambda f: _spin(f, self.minrv_var, 0, 10, 0.1))
 
+        # ── Market Cap ────────────────────────────────────────────────────────
         _section(tab, "Market Cap")
         self.minmc_var = tk.StringVar(
             value=str(int(pf.get("min_market_cap", 0) / 1e9)) if pf.get("min_market_cap") else "0"
