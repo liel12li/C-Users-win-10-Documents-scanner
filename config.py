@@ -1,46 +1,55 @@
 """
-Stock Scanner Configuration
-Edit these values to customize the scanner behavior.
+Stock Scanner Configuration – edit freely, no coding needed.
 """
 
 CONFIG = {
-    # ── Output ──────────────────────────────────────────────
-    "top_n": 4,
-    "output_file": "scanner_output.html",
+    # ── Output ───────────────────────────────────────────────
+    "top_n":        4,
+    "output_file":  "scanner_output.html",
 
     # ── Universe ─────────────────────────────────────────────
-    # Options: "finviz" | "sp500" | "nasdaq100" | "custom"
-    "universe_method": "finviz",
-    "max_stocks": 120,  # Cap to keep runtime reasonable (~3-4 min)
+    # "finviz" | "nasdaq100" | "sp500" | "custom"
+    "universe_method":  "finviz",
+    "max_stocks":       60,       # keep low → fast scan
+    "parallel_workers": 15,       # concurrent info fetches
 
-    # Custom tickers (used only when universe_method = "custom")
-    "custom_tickers": ["AAPL", "NVDA", "MSFT", "TSLA", "META"],
+    # Used only when universe_method = "custom"
+    "custom_tickers": ["AAPL", "NVDA", "MSFT", "TSLA", "META", "AMZN"],
 
-    # Finviz pre-filter (used when universe_method = "finviz")
+    # Finviz screener pre-filter
     "finviz_filters": {
         "Average Volume": "Over 500K",
-        "Market Cap.": "Large ($10bln to $200bln)",
-        "Country": "USA",
+        "Market Cap.":    "Large ($10bln to $200bln)",
+        "Country":        "USA",
+    },
+
+    # ── Hard pre-filters (applied before scoring) ────────────
+    # Stocks that don't pass these are dropped immediately
+    "pre_filters": {
+        "rsi_min":        20.0,    # drop if RSI < this
+        "rsi_max":        85.0,    # drop if RSI > this
+        "min_price":       5.0,    # drop if price < $5
+        "max_price":    5000.0,    # drop if price > $5000
+        "min_rel_volume":  0.3,    # drop if relative volume < this
+        "only_sectors":    [],     # e.g. ["Technology","Healthcare"]; [] = all
+        "min_market_cap":  0,      # in USD, e.g. 1_000_000_000 for $1B
     },
 
     # ── Scoring Weights (must sum to 1.0) ────────────────────
     "weights": {
-        "technical":      0.30,   # RSI, MACD, Moving Averages
-        "momentum":       0.20,   # Multi-timeframe price returns
-        "volume":         0.20,   # Relative volume, vol trend
-        "fundamentals":   0.15,   # P/E, EPS/Revenue growth, margins
-        "short_interest": 0.15,   # % float short, days-to-cover
+        "technical":       0.30,
+        "momentum":        0.20,
+        "volume":          0.20,
+        "fundamentals":    0.15,
+        "short_interest":  0.15,
     },
 
-    # ── Technical Thresholds ─────────────────────────────────
-    "rsi_sweet_spot": (40, 65),   # RSI range that scores highest
+    # ── RSI scoring thresholds ───────────────────────────────
+    "rsi_sweet_spot": (40, 65),
     "rsi_oversold":   30,
     "rsi_overbought": 75,
 
-    # ── Volume Thresholds ────────────────────────────────────
-    "rel_vol_great":  3.0,
-    "rel_vol_good":   1.5,
-
-    # ── Delay between yfinance requests (seconds) ────────────
-    "request_delay": 0.15,
+    # ── Volume thresholds ────────────────────────────────────
+    "rel_vol_great": 3.0,
+    "rel_vol_good":  1.5,
 }

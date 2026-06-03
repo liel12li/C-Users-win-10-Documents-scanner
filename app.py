@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""
-Stock Scanner – GUI Launcher
-Just run:  python app.py
-"""
+"""Stock Scanner – GUI launcher.  Run: python app.py"""
 
 import os
 import sys
@@ -12,19 +9,22 @@ import webbrowser
 import tkinter as tk
 from tkinter import ttk, scrolledtext
 
-# ── Colours ──────────────────────────────────────────────────────────────────
-BG       = "#060912"
-BG2      = "#0d1433"
-BG3      = "#111d38"
-ACCENT   = "#00cc66"
-ACCENT2  = "#0055ff"
-TEXT     = "#dde6ff"
-MUTED    = "#5568a0"
-LOG_FG   = "#7080aa"
+# ── Palette ───────────────────────────────────────────────────────────────────
+BG     = "#060912"
+BG2    = "#0d1433"
+BG3    = "#111d38"
+ACCENT = "#00cc66"
+BLUE   = "#0055ff"
+TEXT   = "#dde6ff"
+MUTED  = "#5568a0"
+LOG_FG = "#6878aa"
+RED    = "#cc2244"
 
 
-# ── Log handler that writes into a Tkinter Text widget ───────────────────────
-class WidgetLogHandler(logging.Handler):
+# ─────────────────────────────────────────────────────────────────────────────
+# Logging → Tkinter Text widget
+# ─────────────────────────────────────────────────────────────────────────────
+class WidgetLog(logging.Handler):
     def __init__(self, widget: tk.Text):
         super().__init__()
         self.widget = widget
@@ -40,288 +40,391 @@ class WidgetLogHandler(logging.Handler):
         self.widget.config(state="disabled")
 
 
-# ── Settings window ──────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
+# Helpers
+# ─────────────────────────────────────────────────────────────────────────────
+def _lbl(parent, text, size=10, bold=False, color=TEXT, bg=BG, anchor="w", **kw):
+    font = ("Segoe UI", size, "bold" if bold else "normal")
+    return tk.Label(parent, text=text, font=font, fg=color, bg=bg, anchor=anchor, **kw)
+
+def _combo(parent, var, values, width=28):
+    cb = ttk.Combobox(parent, textvariable=var, values=values,
+                      state="readonly", font=("Segoe UI", 10), width=width)
+    return cb
+
+def _spin(parent, var, lo, hi, step=1, width=8):
+    return tk.Spinbox(parent, from_=lo, to=hi, increment=step,
+                      textvariable=var, font=("Segoe UI", 10), width=width,
+                      bg=BG3, fg=TEXT, insertbackground=TEXT,
+                      buttonbackground=BG2, relief="flat")
+
+def _row(frame, label, widget_fn, pady=5):
+    f = tk.Frame(frame, bg=BG)
+    f.pack(fill="x", padx=18, pady=pady)
+    _lbl(f, label, width=26).pack(side="left")
+    w = widget_fn(f)
+    w.pack(side="left")
+    return w
+
+def _section(parent, title):
+    f = tk.Frame(parent, bg=BG)
+    f.pack(fill="x", padx=10, pady=(10, 2))
+    _lbl(f, f"── {title} ──", size=9, color="#3d5488", bg=BG).pack(anchor="w", padx=8)
+    return f
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Settings Window
+# ─────────────────────────────────────────────────────────────────────────────
 class SettingsWindow(tk.Toplevel):
-    def __init__(self, parent, config: dict, on_save):
+    SECTORS = [
+        "Technology", "Healthcare", "Financial Services",
+        "Consumer Cyclical", "Consumer Defensive", "Industrials",
+        "Energy", "Basic Materials", "Real Estate",
+        "Communication Services", "Utilities",
+    ]
+
+    def __init__(self, parent, cfg: dict, on_save):
         super().__init__(parent)
         self.title("Settings")
         self.configure(bg=BG)
-        self.resizable(False, False)
+        self.resizable(False, True)
         self.grab_set()
         self.on_save = on_save
-        self.config_ref = config
+        self.cfg = cfg
 
-        pad = {"padx": 18, "pady": 6}
+        _lbl(self, "Scanner Settings", size=14, bold=True).pack(pady=(16, 2))
+        _lbl(self, "Changes apply on the next run", size=9, color=MUTED).pack()
 
-        tk.Label(self, text="Scanner Settings", font=("Segoe UI", 14, "bold"),
-                 bg=BG, fg=TEXT).pack(pady=(18, 4))
-        tk.Label(self, text="Changes take effect on the next scan",
-                 font=("Segoe UI", 9), bg=BG, fg=MUTED).pack(pady=(0, 12))
+        # ── Notebook tabs ─────────────────────────────────────────────────────
+        style = ttk.Style()
+        style.theme_use("default")
+        style.configure("TNotebook",       background=BG, borderwidth=0)
+        style.configure("TNotebook.Tab",   background=BG3, foreground=MUTED,
+                        padding=[12, 5], font=("Segoe UI", 10))
+        style.map("TNotebook.Tab",
+                  background=[("selected", BG2)], foreground=[("selected", TEXT)])
 
-        def row(label, widget_factory):
-            f = tk.Frame(self, bg=BG)
-            f.pack(fill="x", **pad)
-            tk.Label(f, text=label, font=("Segoe UI", 10),
-                     bg=BG, fg=TEXT, width=22, anchor="w").pack(side="left")
-            w = widget_factory(f)
-            w.pack(side="left", fill="x", expand=True)
-            return w
+        nb = ttk.Notebook(self)
+        nb.pack(fill="both", expand=True, padx=12, pady=10)
 
-        # ── Market Cap ──
-        self.cap_var = tk.StringVar(value=config["finviz_filters"].get("Market Cap.", "Large ($10bln to $200bln)"))
-        cap_opts = [
+        tab1 = tk.Frame(nb, bg=BG)
+        tab2 = tk.Frame(nb, bg=BG)
+        tab3 = tk.Frame(nb, bg=BG)
+        nb.add(tab1, text=" Universe ")
+        nb.add(tab2, text=" Filters ")
+        nb.add(tab3, text=" Weights ")
+
+        self._build_universe_tab(tab1)
+        self._build_filters_tab(tab2)
+        self._build_weights_tab(tab3)
+
+        # ── Save ──────────────────────────────────────────────────────────────
+        tk.Button(self, text="  ✓  Save Settings  ",
+                  font=("Segoe UI", 11, "bold"),
+                  bg=ACCENT, fg="white", activebackground="#009944",
+                  relief="flat", padx=20, pady=8, cursor="hand2",
+                  command=self._save).pack(pady=14)
+
+    # ── Tab 1: Universe ───────────────────────────────────────────────────────
+    def _build_universe_tab(self, tab):
+        _section(tab, "Data Source")
+
+        self.universe_var = tk.StringVar(value=self.cfg["universe_method"])
+        _row(tab, "Universe", lambda f: _combo(f, self.universe_var,
+             ["finviz", "nasdaq100", "sp500", "custom"]))
+
+        self.maxstocks_var = tk.IntVar(value=self.cfg["max_stocks"])
+        _row(tab, "Max stocks to scan", lambda f: _spin(f, self.maxstocks_var, 10, 500, 10))
+
+        self.topn_var = tk.IntVar(value=self.cfg["top_n"])
+        _row(tab, "Top results to show", lambda f: _spin(f, self.topn_var, 1, 10))
+
+        _section(tab, "Finviz Pre-Filter")
+
+        self.cap_var = tk.StringVar(value=self.cfg["finviz_filters"].get("Market Cap.", "Large ($10bln to $200bln)"))
+        _row(tab, "Market Cap", lambda f: _combo(f, self.cap_var, [
             "Mega ($200bln and more)",
             "Large ($10bln to $200bln)",
             "Mid ($2bln to $10bln)",
             "Small ($300mln to $2bln)",
-        ]
-        row("Market Cap", lambda f: ttk.Combobox(f, textvariable=self.cap_var,
-                                                  values=cap_opts, state="readonly",
-                                                  font=("Segoe UI", 10), width=28))
+        ]))
 
-        # ── Universe method ──
-        self.universe_var = tk.StringVar(value=config["universe_method"])
-        row("Universe", lambda f: ttk.Combobox(f, textvariable=self.universe_var,
-                                                values=["finviz", "nasdaq100", "sp500"],
-                                                state="readonly",
-                                                font=("Segoe UI", 10), width=28))
+        self.avgvol_var = tk.StringVar(value=self.cfg["finviz_filters"].get("Average Volume", "Over 500K"))
+        _row(tab, "Average Volume", lambda f: _combo(f, self.avgvol_var, [
+            "Over 100K", "Over 200K", "Over 500K", "Over 1M", "Over 2M",
+        ]))
 
-        # ── Max stocks ──
-        self.maxstocks_var = tk.IntVar(value=config["max_stocks"])
-        def make_spin(f):
-            return tk.Spinbox(f, from_=20, to=300, increment=10,
-                              textvariable=self.maxstocks_var,
-                              font=("Segoe UI", 10), width=8,
-                              bg=BG3, fg=TEXT, insertbackground=TEXT,
-                              buttonbackground=BG2, relief="flat")
-        row("Max stocks to scan", make_spin)
+        _section(tab, "Sector Filter (leave empty = all sectors)")
+        f = tk.Frame(tab, bg=BG)
+        f.pack(fill="x", padx=18, pady=4)
+        _lbl(f, "Only these sectors:", size=9, color=MUTED, bg=BG).pack(anchor="w")
+        self.sector_vars: dict[str, tk.BooleanVar] = {}
+        only = self.cfg["pre_filters"].get("only_sectors", [])
+        grid = tk.Frame(f, bg=BG)
+        grid.pack(anchor="w", pady=4)
+        for i, sec in enumerate(self.SECTORS):
+            v = tk.BooleanVar(value=sec in only)
+            self.sector_vars[sec] = v
+            cb = tk.Checkbutton(grid, text=sec, variable=v,
+                                bg=BG, fg=TEXT, selectcolor=BG3,
+                                activebackground=BG, activeforeground=TEXT,
+                                font=("Segoe UI", 9))
+            cb.grid(row=i // 2, column=i % 2, sticky="w", padx=4, pady=1)
 
-        # ── Top N ──
-        self.topn_var = tk.IntVar(value=config["top_n"])
-        def make_topn(f):
-            return tk.Spinbox(f, from_=2, to=10, increment=1,
-                              textvariable=self.topn_var,
-                              font=("Segoe UI", 10), width=8,
-                              bg=BG3, fg=TEXT, insertbackground=TEXT,
-                              buttonbackground=BG2, relief="flat")
-        row("Top results to show", make_topn)
+    # ── Tab 2: Filters ────────────────────────────────────────────────────────
+    def _build_filters_tab(self, tab):
+        pf = self.cfg["pre_filters"]
 
-        # ── Weight sliders ──
-        tk.Label(self, text="Scoring weights", font=("Segoe UI", 10, "bold"),
-                 bg=BG, fg=MUTED).pack(pady=(14, 2))
+        _section(tab, "RSI Range")
+        self.rsi_min_var = tk.DoubleVar(value=pf.get("rsi_min", 20))
+        self.rsi_max_var = tk.DoubleVar(value=pf.get("rsi_max", 85))
+        _row(tab, "RSI minimum",  lambda f: _spin(f, self.rsi_min_var, 0, 100))
+        _row(tab, "RSI maximum",  lambda f: _spin(f, self.rsi_max_var, 0, 100))
 
-        self.weight_vars = {}
-        weight_labels = {
-            "technical":      "Technical (RSI/MACD/MA)",
-            "momentum":       "Momentum",
-            "volume":         "Volume",
-            "fundamentals":   "Fundamentals",
+        _section(tab, "Price Range")
+        self.minprice_var = tk.DoubleVar(value=pf.get("min_price", 5))
+        self.maxprice_var = tk.DoubleVar(value=pf.get("max_price", 5000))
+        _row(tab, "Min price ($)",  lambda f: _spin(f, self.minprice_var, 0, 10000, 5))
+        _row(tab, "Max price ($)",  lambda f: _spin(f, self.maxprice_var, 0, 50000, 100))
+
+        _section(tab, "Volume")
+        self.minrv_var = tk.DoubleVar(value=pf.get("min_rel_volume", 0.3))
+        _row(tab, "Min relative volume", lambda f: _spin(f, self.minrv_var, 0, 10, 0.1))
+
+        _section(tab, "Market Cap")
+        self.minmc_var = tk.StringVar(
+            value=str(int(pf.get("min_market_cap", 0) / 1e9)) if pf.get("min_market_cap") else "0"
+        )
+        _row(tab, "Min market cap ($B)", lambda f: _spin(f, self.minmc_var, 0, 10000, 1))
+
+    # ── Tab 3: Weights ────────────────────────────────────────────────────────
+    def _build_weights_tab(self, tab):
+        _section(tab, "Scoring Weights  (higher = more influence)")
+        self.weight_vars: dict[str, tk.IntVar] = {}
+        labels = {
+            "technical":      "Technical (RSI / MACD / MA)",
+            "momentum":       "Momentum  (price returns)",
+            "volume":         "Volume  (relative volume)",
+            "fundamentals":   "Fundamentals  (P/E, EPS…)",
             "short_interest": "Short Interest",
         }
-        for key, label in weight_labels.items():
-            val = int(config["weights"][key] * 100)
+        for key, label in labels.items():
+            val = int(self.cfg["weights"][key] * 100)
             var = tk.IntVar(value=val)
             self.weight_vars[key] = var
-            f = tk.Frame(self, bg=BG)
-            f.pack(fill="x", padx=18, pady=3)
-            tk.Label(f, text=label, font=("Segoe UI", 9),
-                     bg=BG, fg=TEXT, width=26, anchor="w").pack(side="left")
-            sl = tk.Scale(f, variable=var, from_=0, to=60,
-                          orient="horizontal", length=160,
-                          bg=BG, fg=TEXT, troughcolor=BG3,
+            f = tk.Frame(tab, bg=BG)
+            f.pack(fill="x", padx=18, pady=4)
+            _lbl(f, label, size=9, width=30).pack(side="left")
+            sl = tk.Scale(f, variable=var, from_=0, to=60, orient="horizontal",
+                          length=180, bg=BG, fg=TEXT, troughcolor=BG3,
                           highlightthickness=0, sliderlength=14,
                           font=("Segoe UI", 8))
             sl.pack(side="left")
-            tk.Label(f, textvariable=var, width=3,
-                     font=("Segoe UI", 9), bg=BG, fg=ACCENT).pack(side="left")
+            tk.Label(f, textvariable=var, width=3, font=("Segoe UI", 9),
+                     bg=BG, fg=ACCENT).pack(side="left")
             tk.Label(f, text="%", font=("Segoe UI", 9), bg=BG, fg=MUTED).pack(side="left")
 
-        # ── Save button ──
-        tk.Button(self, text="  Save Settings  ",
-                  font=("Segoe UI", 11, "bold"),
-                  bg=ACCENT, fg="white", activebackground="#009944",
-                  relief="flat", padx=20, pady=8, cursor="hand2",
-                  command=self._save).pack(pady=18)
+        _lbl(tab, "Weights are auto-normalised to 100% on save.",
+             size=8, color=MUTED).pack(pady=6)
 
+    # ── Save ──────────────────────────────────────────────────────────────────
     def _save(self):
-        self.config_ref["universe_method"] = self.universe_var.get()
-        self.config_ref["max_stocks"]       = self.maxstocks_var.get()
-        self.config_ref["top_n"]            = self.topn_var.get()
-        self.config_ref["finviz_filters"]["Market Cap."] = self.cap_var.get()
+        self.cfg["universe_method"] = self.universe_var.get()
+        self.cfg["max_stocks"]      = self.maxstocks_var.get()
+        self.cfg["top_n"]           = self.topn_var.get()
+        self.cfg["finviz_filters"]["Market Cap."]   = self.cap_var.get()
+        self.cfg["finviz_filters"]["Average Volume"] = self.avgvol_var.get()
+
+        self.cfg["pre_filters"]["rsi_min"]        = float(self.rsi_min_var.get())
+        self.cfg["pre_filters"]["rsi_max"]        = float(self.rsi_max_var.get())
+        self.cfg["pre_filters"]["min_price"]      = float(self.minprice_var.get())
+        self.cfg["pre_filters"]["max_price"]      = float(self.maxprice_var.get())
+        self.cfg["pre_filters"]["min_rel_volume"] = float(self.minrv_var.get())
+        try:
+            self.cfg["pre_filters"]["min_market_cap"] = float(self.minmc_var.get()) * 1e9
+        except ValueError:
+            pass
+
+        only = [s for s, v in self.sector_vars.items() if v.get()]
+        self.cfg["pre_filters"]["only_sectors"] = only
 
         raw = {k: v.get() for k, v in self.weight_vars.items()}
         total = sum(raw.values()) or 1
         for k, v in raw.items():
-            self.config_ref["weights"][k] = round(v / total, 4)
+            self.cfg["weights"][k] = round(v / total, 4)
 
         self.on_save()
         self.destroy()
 
 
-# ── Main app window ───────────────────────────────────────────────────────────
-class StockScannerApp:
+# ─────────────────────────────────────────────────────────────────────────────
+# Main App Window
+# ─────────────────────────────────────────────────────────────────────────────
+class App:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("Stock Scanner")
         self.root.configure(bg=BG)
-        self.root.geometry("720x560")
-        self.root.minsize(580, 460)
+        self.root.geometry("740x580")
+        self.root.minsize(600, 480)
 
-        # Load config
         sys.path.insert(0, os.path.dirname(__file__))
         from config import CONFIG
         self.cfg = CONFIG
 
         self._scanning = False
-        self._build_ui()
+        self._log_handler: logging.Handler | None = None
+        self._build()
 
-    # ── Build UI ──────────────────────────────────────────────────────────────
-    def _build_ui(self):
-        # ── Top bar ──────────────────────────────────────────────────────────
-        top = tk.Frame(self.root, bg=BG2, pady=16)
+    # ── Layout ────────────────────────────────────────────────────────────────
+    def _build(self):
+        # Top bar
+        top = tk.Frame(self.root, bg=BG2, pady=14)
         top.pack(fill="x", padx=14, pady=(14, 0))
-
-        tk.Label(top, text="📊  Stock Scanner",
-                 font=("Segoe UI", 20, "bold"),
-                 bg=BG2, fg=ACCENT).pack(side="left", padx=16)
-
+        _lbl(top, "📊  Stock Scanner", size=20, bold=True, color=ACCENT, bg=BG2).pack(side="left", padx=16)
         tk.Button(top, text="⚙  Settings",
-                  font=("Segoe UI", 10),
-                  bg=BG3, fg=MUTED,
-                  activebackground=BG2,
+                  font=("Segoe UI", 10), bg=BG3, fg=MUTED, activebackground=BG2,
                   relief="flat", padx=10, pady=6, cursor="hand2",
                   command=self._open_settings).pack(side="right", padx=12)
 
-        # ── Subtitle ─────────────────────────────────────────────────────────
-        tk.Label(self.root,
-                 text="Multi-factor analysis  ·  Technical · Momentum · Volume · Fundamentals · Short Interest",
-                 font=("Segoe UI", 9), bg=BG, fg=MUTED).pack(pady=(10, 0))
+        _lbl(self.root,
+             "Technical · Momentum · Volume · Fundamentals · Short Interest",
+             size=9, color=MUTED).pack(pady=(10, 0))
 
-        # ── Run button ────────────────────────────────────────────────────────
-        self.run_btn = tk.Button(
-            self.root,
-            text="▶   RUN SCANNER",
-            font=("Segoe UI", 16, "bold"),
-            bg=ACCENT, fg="white",
-            activebackground="#009944",
-            relief="flat", padx=40, pady=14,
-            cursor="hand2",
-            command=self._start_scan,
-        )
-        self.run_btn.pack(pady=18)
+        # Button row
+        btn_row = tk.Frame(self.root, bg=BG)
+        btn_row.pack(pady=16)
 
-        # ── Status ────────────────────────────────────────────────────────────
+        self.run_btn = tk.Button(btn_row, text="▶   RUN SCANNER",
+                                 font=("Segoe UI", 15, "bold"),
+                                 bg=ACCENT, fg="white", activebackground="#009944",
+                                 relief="flat", padx=36, pady=13, cursor="hand2",
+                                 command=self._start)
+        self.run_btn.pack(side="left", padx=6)
+
+        self.cancel_btn = tk.Button(btn_row, text="✕  Cancel",
+                                    font=("Segoe UI", 11),
+                                    bg=RED, fg="white", activebackground="#aa1133",
+                                    relief="flat", padx=16, pady=13, cursor="hand2",
+                                    state="disabled", command=self._cancel)
+        self.cancel_btn.pack(side="left", padx=6)
+
+        # Status + progress
         self.status_var = tk.StringVar(value="Ready – press RUN to start")
+        _lbl(self.root, "", size=1, color=MUTED).pack()  # spacer
         tk.Label(self.root, textvariable=self.status_var,
                  font=("Segoe UI", 9), bg=BG, fg=MUTED).pack()
 
-        # ── Progress bar ──────────────────────────────────────────────────────
-        style = ttk.Style()
-        style.theme_use("default")
-        style.configure("green.Horizontal.TProgressbar",
-                        troughcolor=BG3, background=ACCENT, thickness=6)
-        self.progress = ttk.Progressbar(
-            self.root, mode="indeterminate", length=460,
-            style="green.Horizontal.TProgressbar",
-        )
-        self.progress.pack(pady=6)
+        sty = ttk.Style()
+        sty.theme_use("default")
+        sty.configure("G.Horizontal.TProgressbar",
+                      troughcolor=BG3, background=ACCENT, thickness=5)
+        self.pb = ttk.Progressbar(self.root, mode="indeterminate", length=480,
+                                  style="G.Horizontal.TProgressbar")
+        self.pb.pack(pady=5)
 
-        # ── Log area ──────────────────────────────────────────────────────────
-        log_frame = tk.Frame(self.root, bg=BG, padx=14)
-        log_frame.pack(fill="both", expand=True, padx=14, pady=(4, 6))
-
+        # Log
+        lf = tk.Frame(self.root, bg=BG)
+        lf.pack(fill="both", expand=True, padx=14, pady=(2, 6))
         self.log_box = scrolledtext.ScrolledText(
-            log_frame,
-            font=("Consolas", 9), bg="#080d1c", fg=LOG_FG,
-            insertbackground=LOG_FG,
-            state="disabled", relief="flat", borderwidth=0,
-        )
+            lf, font=("Consolas", 9), bg="#080d1c", fg=LOG_FG,
+            insertbackground=LOG_FG, state="disabled", relief="flat", borderwidth=0)
         self.log_box.pack(fill="both", expand=True)
 
-        # ── Open dashboard button (hidden until scan completes) ───────────────
-        self.open_btn = tk.Button(
-            self.root,
-            text="🌐   Open Dashboard",
-            font=("Segoe UI", 12, "bold"),
-            bg=ACCENT2, fg="white",
-            activebackground="#003dbb",
-            relief="flat", padx=26, pady=10,
-            cursor="hand2",
-            command=self._open_dashboard,
-        )
+        # Open dashboard button (hidden until scan finishes)
+        self.open_btn = tk.Button(self.root, text="🌐   Open Dashboard",
+                                  font=("Segoe UI", 12, "bold"),
+                                  bg=BLUE, fg="white", activebackground="#003dbb",
+                                  relief="flat", padx=26, pady=10, cursor="hand2",
+                                  command=self._open_dashboard)
 
     # ── Actions ───────────────────────────────────────────────────────────────
     def _open_settings(self):
-        SettingsWindow(self.root, self.cfg, self._on_settings_saved)
+        SettingsWindow(self.root, self.cfg, lambda: self.status_var.set("Settings saved ✓"))
 
-    def _on_settings_saved(self):
-        self.status_var.set("Settings saved ✓  – press RUN to scan")
-
-    def _start_scan(self):
+    def _start(self):
         if self._scanning:
             return
         self._scanning = True
         self.run_btn.config(state="disabled", text="⏳   Scanning…")
+        self.cancel_btn.config(state="normal")
         self.open_btn.pack_forget()
-        self.progress.start(8)
-        self.status_var.set("Scanning… this usually takes 3-5 minutes")
+        self.pb.start(8)
+        self.status_var.set("Scanning… (batch download + parallel fetch, usually ~1 min)")
 
-        # Clear log
         self.log_box.config(state="normal")
         self.log_box.delete("1.0", tk.END)
         self.log_box.config(state="disabled")
 
         threading.Thread(target=self._worker, daemon=True).start()
 
+    def _cancel(self):
+        import scanner as sc
+        sc.cancel()
+        self.status_var.set("Cancelling…")
+        self.cancel_btn.config(state="disabled")
+
     def _worker(self):
+        handler = None
         try:
+            import scanner as sc
             from scanner import run_scanner, generate_dashboard
 
-            # Wire up logging → widget
-            handler = WidgetLogHandler(self.log_box)
-            handler.setFormatter(
-                logging.Formatter("%(asctime)s  %(message)s", datefmt="%H:%M:%S")
-            )
+            # Sync runtime config
+            sc.CONFIG.update(self.cfg)
+
+            handler = WidgetLog(self.log_box)
+            handler.setFormatter(logging.Formatter("%(asctime)s  %(message)s", datefmt="%H:%M:%S"))
             root_log = logging.getLogger()
             root_log.addHandler(handler)
             root_log.setLevel(logging.INFO)
 
-            # Patch CONFIG in scanner module with current UI config
-            import scanner as sc_mod
-            sc_mod.CONFIG.update(self.cfg)
-
             top = run_scanner()
-            root_log.removeHandler(handler)
+
+            if handler:
+                root_log.removeHandler(handler)
 
             if top:
                 generate_dashboard(top)
                 self.root.after(0, self._done_ok)
+            elif sc._cancel.is_set():
+                self.root.after(0, self._done_cancelled)
             else:
-                self.root.after(0, lambda: self._done_err("No stocks found – check your internet connection"))
+                self.root.after(0, lambda: self._done_err("No stocks passed filters – try relaxing the pre-filters"))
+
         except Exception as exc:
+            if handler:
+                logging.getLogger().removeHandler(handler)
             self.root.after(0, lambda: self._done_err(str(exc)))
 
     def _done_ok(self):
-        self._scanning = False
-        self.progress.stop()
-        self.run_btn.config(state="normal", text="▶   RUN SCANNER")
-        self.status_var.set("✅  Scan complete! Dashboard opened in browser.")
+        self._finish()
+        self.status_var.set("✅  Scan complete! Opening dashboard…")
         self.open_btn.pack(pady=(2, 10))
         self._open_dashboard()
 
+    def _done_cancelled(self):
+        self._finish()
+        self.status_var.set("Scan cancelled.")
+
     def _done_err(self, msg):
+        self._finish()
+        self.status_var.set(f"❌  {msg}")
+
+    def _finish(self):
         self._scanning = False
-        self.progress.stop()
+        self.pb.stop()
         self.run_btn.config(state="normal", text="▶   RUN SCANNER")
-        self.status_var.set(f"❌  Error: {msg}")
+        self.cancel_btn.config(state="disabled")
 
     def _open_dashboard(self):
         path = os.path.abspath(self.cfg["output_file"])
         webbrowser.open(f"file:///{path}")
 
 
-# ── Entry point ───────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     root = tk.Tk()
-    app = StockScannerApp(root)
+    App(root)
     root.mainloop()
