@@ -10,9 +10,13 @@ Target runtime: ~60 seconds for 60 stocks.
 """
 
 import sys
+import json
+import time
 import logging
 import threading
 import warnings
+import http.server
+import urllib.parse
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
@@ -24,6 +28,115 @@ import yfinance as yf
 from config import CONFIG
 
 warnings.filterwarnings("ignore")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LIVE PRICE SERVER  (localhost:18723)
+# ─────────────────────────────────────────────────────────────────────────────
+PRICE_PORT   = 18723
+_price_cache: dict = {}          # {ticker: {price, change_pct, prev_close}}
+_cache_lock  = threading.Lock()
+_cache_ts    = 0.0               # epoch of last refresh
+_CACHE_TTL   = 60                # seconds between yfinance refreshes
+
+
+def _yf_live(symbols: list) -> dict:
+    """Fetch latest price + change% for a list of symbols via yfinance."""
+    if not symbols:
+        return {}
+    try:
+        raw = yf.download(
+            symbols, period="5d", interval="1d",
+            auto_adjust=True, progress=False, timeout=20,
+            group_by="ticker",
+        )
+        out: dict = {}
+        for sym in symbols:
+            try:
+                if isinstance(raw.columns, pd.MultiIndex):
+                    closes = raw[sym]["Close"].dropna()
+                else:
+                    closes = raw["Close"].dropna()
+                if len(closes) < 2:
+                    continue
+                curr  = float(closes.iloc[-1])
+                prev  = float(closes.iloc[-2])
+                chpct = (curr / prev - 1) * 100
+                out[sym] = {
+                    "price":      round(curr, 2),
+                    "change_pct": round(chpct, 2),
+                    "prev_close": round(prev, 2),
+                }
+            except Exception:
+                pass
+        return out
+    except Exception:
+        return {}
+
+
+def prefill_price_cache(stocks: list) -> None:
+    """Pre-populate cache with data we already have from the scan."""
+    with _cache_lock:
+        global _cache_ts
+        for s in stocks:
+            t = s["ticker"]
+            _price_cache[t] = {
+                "price":      round(s["price"], 2),
+                "change_pct": round(s["momentum"]["ret_1d"], 2),
+                "prev_close": round(s["price"] / (1 + s["momentum"]["ret_1d"] / 100), 2),
+            }
+        _cache_ts = time.time()
+
+
+def _background_refresh(symbols: list) -> None:
+    global _cache_ts
+    fresh = _yf_live(symbols)
+    if fresh:
+        with _cache_lock:
+            _price_cache.update(fresh)
+            _cache_ts = time.time()
+
+
+class _PriceHandler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        global _cache_ts
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/prices":
+            params  = urllib.parse.parse_qs(parsed.query)
+            symbols = [s.strip() for s in params.get("symbols", [""])[0].split(",") if s.strip()]
+
+            # Trigger background refresh if cache is stale
+            if time.time() - _cache_ts > _CACHE_TTL:
+                threading.Thread(target=_background_refresh, args=(symbols,), daemon=True).start()
+
+            with _cache_lock:
+                data = {k: _price_cache[k] for k in symbols if k in _price_cache}
+
+            body = json.dumps(data).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def log_message(self, *_): pass   # silent
+
+
+_httpd: http.server.HTTPServer | None = None
+
+
+def start_price_server() -> bool:
+    global _httpd
+    try:
+        _httpd = http.server.HTTPServer(("localhost", PRICE_PORT), _PriceHandler)
+        t = threading.Thread(target=_httpd.serve_forever, daemon=True)
+        t.start()
+        return True
+    except OSError:
+        return False   # port busy – another instance may already be running
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)-8s %(message)s",
@@ -504,17 +617,18 @@ def _card(rank: int, s: dict) -> str:
     sf = si["metrics"].get("short_float", 0) or 0
     if sf > 15: badges += '<span class="badge r">High Short %</span>'
 
-    cc = _col(s["composite_score"])
-    gold = "gold-border" if rank == 1 else ""
+    cc    = _col(s["composite_score"])
+    gold  = "gold-border" if rank == 1 else ""
+    tk    = s["ticker"]
     r1d_c = "#00ff88" if mom["ret_1d"] >= 0 else "#ff4466"
     r1w_c = "#00ff88" if mom["ret_1w"] >= 0 else "#ff4466"
 
     return f"""
-  <div class="card {gold}">
+  <div class="card {gold}" data-score="{s['composite_score']:.2f}" data-ticker="{tk}">
     <div class="ch">
       <div class="rb">#{rank}</div>
       <div class="ti">
-        <div class="tk">{s["ticker"]}</div>
+        <div class="tk">{tk}</div>
         <div class="cn">{s["name"][:42]}</div>
         <div class="sc2">{s["sector"]} · {_fmt_cap(s["market_cap"])}</div>
       </div>
@@ -524,9 +638,9 @@ def _card(rank: int, s: dict) -> str:
       </div>
     </div>
     <div class="pr">
-      <span class="cp">${s["price"]:.2f}</span>
-      <span style="color:{r1d_c};font-size:.85rem;font-weight:600">{_fmt_pct(mom["ret_1d"])} today</span>
-      <span style="color:{r1w_c};font-size:.85rem;margin-left:8px">{_fmt_pct(mom["ret_1w"])} 1W</span>
+      <span class="cp" id="p-{tk}">${s["price"]:.2f}</span>
+      <span id="c-{tk}" style="color:{r1d_c};font-size:.85rem;font-weight:600">{_fmt_pct(mom["ret_1d"])} today</span>
+      <span id="w-{tk}" style="color:{r1w_c};font-size:.85rem;margin-left:8px">{_fmt_pct(mom["ret_1w"])} 1W</span>
     </div>
     <div class="badges">{badges or '<span style="color:#3d4f7a;font-size:.75rem">No strong signals</span>'}</div>
     {mets}
@@ -535,12 +649,17 @@ def _card(rank: int, s: dict) -> str:
 
 
 def generate_dashboard(stocks: list) -> None:
-    ts    = datetime.now().strftime("%Y-%m-%d  %H:%M:%S")
-    cards = "".join(_card(i + 1, s) for i, s in enumerate(stocks))
-    w     = CONFIG["weights"]
-    winfo = (f"Technical {w['technical']*100:.0f}% · Momentum {w['momentum']*100:.0f}% · "
-             f"Volume {w['volume']*100:.0f}% · Fundamentals {w['fundamentals']*100:.0f}% · "
-             f"Short Interest {w['short_interest']*100:.0f}%")
+    # Stocks arrive pre-sorted by composite_score (highest first) from run_scanner().
+    # Re-sort here too as belt-and-suspenders.
+    stocks = sorted(stocks, key=lambda x: x["composite_score"], reverse=True)
+
+    ts      = datetime.now().strftime("%Y-%m-%d  %H:%M:%S")
+    cards   = "".join(_card(i + 1, s) for i, s in enumerate(stocks))
+    w       = CONFIG["weights"]
+    winfo   = (f"Technical {w['technical']*100:.0f}% · Momentum {w['momentum']*100:.0f}% · "
+               f"Volume {w['volume']*100:.0f}% · Fundamentals {w['fundamentals']*100:.0f}% · "
+               f"Short Interest {w['short_interest']*100:.0f}%")
+    symbols_js = json.dumps([s["ticker"] for s in stocks])
 
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -552,7 +671,12 @@ def generate_dashboard(stocks: list) -> None:
 body{{background:#060912;color:#dde6ff;font-family:'Segoe UI',-apple-system,sans-serif;min-height:100vh;padding:24px 16px}}
 .hdr{{text-align:center;padding:28px 24px 22px;background:linear-gradient(135deg,#0d1433,#1a2040);border-radius:18px;border:1px solid #1e2d5a;margin-bottom:28px}}
 .hdr h1{{font-size:2rem;font-weight:800;background:linear-gradient(90deg,#00ff88,#00aaff,#aa55ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:6px}}
-.hdr .sub{{color:#5568a0;font-size:.82rem}}.hdr .ts{{color:#3d4f7a;font-size:.78rem;margin-top:6px}}
+.hdr .sub{{color:#5568a0;font-size:.82rem}}.hdr .ts{{color:#3d4f7a;font-size:.78rem;margin-top:4px}}
+.live-bar{{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px}}
+#live-ind{{font-size:.78rem;color:#5568a0;font-family:monospace}}
+.live-dot{{width:8px;height:8px;border-radius:50%;background:#5568a0;display:inline-block}}
+.live-dot.on{{background:#00ff88;box-shadow:0 0 6px #00ff88;animation:pulse 2s infinite}}
+@keyframes pulse{{0%,100%{{opacity:1}}50%{{opacity:.4}}}}
 .grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(370px,1fr));gap:18px;max-width:1600px;margin:0 auto}}
 .card{{background:linear-gradient(145deg,#0e1628,#111d38);border-radius:16px;padding:18px;border:1px solid #1e2d5a;transition:transform .2s,box-shadow .2s}}
 .card:hover{{transform:translateY(-4px);box-shadow:0 14px 44px rgba(0,80,255,.14)}}
@@ -565,7 +689,9 @@ body{{background:#060912;color:#dde6ff;font-family:'Segoe UI',-apple-system,sans
 .sc2{{font-size:.72rem;color:#5568a0;margin-top:2px}}
 .circle{{width:66px;height:66px;border-radius:50%;border:3px solid;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0}}
 .cn2{{font-size:1.4rem;font-weight:800;line-height:1}}.cl{{font-size:.5rem;letter-spacing:1.2px;opacity:.65;margin-top:2px}}
-.pr{{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}}.cp{{font-size:1.35rem;font-weight:700;color:#fff}}
+.pr{{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}}.cp{{font-size:1.35rem;font-weight:700;color:#fff;transition:color .3s}}
+.price-flash{{animation:flash .6s ease}}
+@keyframes flash{{0%{{opacity:.3}}100%{{opacity:1}}}}
 .badges{{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;min-height:24px}}
 .badge{{padding:3px 8px;border-radius:6px;font-size:.7rem;font-weight:600}}
 .badge.g{{background:rgba(0,255,136,.13);color:#00ff88;border:1px solid rgba(0,255,136,.28)}}
@@ -590,13 +716,73 @@ body{{background:#060912;color:#dde6ff;font-family:'Segoe UI',-apple-system,sans
 <div class="hdr">
   <h1>📊 Stock Scanner</h1>
   <div class="sub">Top {len(stocks)} picks · {winfo}</div>
-  <div class="ts">Generated: {ts}</div>
+  <div class="ts">Scan: {ts}</div>
+  <div class="live-bar">
+    <span class="live-dot" id="live-dot"></span>
+    <span id="live-ind">Connecting…</span>
+  </div>
 </div>
-<div class="grid">{cards}</div>
+<div class="grid" id="grid">{cards}</div>
 <div class="ft">
   <p>⚠️ For informational purposes only – not financial advice.</p>
-  <p>Data: Yahoo Finance · Finviz &nbsp;|&nbsp; Universe: {CONFIG["universe_method"]} ({CONFIG["max_stocks"]} stocks)</p>
+  <p>Data: Yahoo Finance · Finviz &nbsp;|&nbsp; Universe: {CONFIG["universe_method"]} ({CONFIG["max_stocks"]} stocks scanned)</p>
 </div>
+
+<script>
+(function(){{
+  const PORT    = {PRICE_PORT};
+  const SYMBOLS = {symbols_js};
+  const dot     = document.getElementById('live-dot');
+  const ind     = document.getElementById('live-ind');
+  let   prevPrices = {{}};
+
+  function fmt(n, d=2){{ return n >= 0 ? '+'+n.toFixed(d)+'%' : n.toFixed(d)+'%'; }}
+
+  function flash(el){{
+    el.classList.remove('price-flash');
+    void el.offsetWidth;
+    el.classList.add('price-flash');
+  }}
+
+  function update(){{
+    fetch('http://localhost:'+PORT+'/prices?symbols='+SYMBOLS.join(','))
+      .then(r => r.json())
+      .then(data => {{
+        dot.className = 'live-dot on';
+        ind.textContent = '🟢 Live · ' + new Date().toLocaleTimeString();
+
+        Object.entries(data).forEach(([sym, info]) => {{
+          // Price
+          const pe = document.getElementById('p-'+sym);
+          if (pe && info.price !== undefined) {{
+            const newTxt = '$' + info.price.toFixed(2);
+            if (pe.textContent !== newTxt) {{ pe.textContent = newTxt; flash(pe); }}
+          }}
+          // Today's change %
+          const ce = document.getElementById('c-'+sym);
+          if (ce && info.change_pct !== undefined) {{
+            const pct = info.change_pct;
+            ce.textContent = fmt(pct) + ' today';
+            ce.style.color = pct >= 0 ? '#00ff88' : '#ff4466';
+          }}
+        }});
+      }})
+      .catch(() => {{
+        dot.className = 'live-dot';
+        ind.textContent = '⚫ Offline – prices from last scan';
+      }});
+  }}
+
+  // Sort cards by data-score descending (belt-and-suspenders)
+  const grid  = document.getElementById('grid');
+  const cards = [...grid.querySelectorAll('.card')];
+  cards.sort((a,b) => parseFloat(b.dataset.score) - parseFloat(a.dataset.score));
+  cards.forEach(c => grid.appendChild(c));
+
+  setInterval(update, 3000);
+  setTimeout(update, 800);
+}})();
+</script>
 </body></html>"""
 
     with open(CONFIG["output_file"], "w", encoding="utf-8") as fh:

@@ -2,13 +2,18 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Stock Scanner – 2026-06-03  18:14:05</title>
+<title>Stock Scanner – 2026-06-03  19:11:44</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#060912;color:#dde6ff;font-family:'Segoe UI',-apple-system,sans-serif;min-height:100vh;padding:24px 16px}
 .hdr{text-align:center;padding:28px 24px 22px;background:linear-gradient(135deg,#0d1433,#1a2040);border-radius:18px;border:1px solid #1e2d5a;margin-bottom:28px}
 .hdr h1{font-size:2rem;font-weight:800;background:linear-gradient(90deg,#00ff88,#00aaff,#aa55ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:6px}
-.hdr .sub{color:#5568a0;font-size:.82rem}.hdr .ts{color:#3d4f7a;font-size:.78rem;margin-top:6px}
+.hdr .sub{color:#5568a0;font-size:.82rem}.hdr .ts{color:#3d4f7a;font-size:.78rem;margin-top:4px}
+.live-bar{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:8px}
+#live-ind{font-size:.78rem;color:#5568a0;font-family:monospace}
+.live-dot{width:8px;height:8px;border-radius:50%;background:#5568a0;display:inline-block}
+.live-dot.on{background:#00ff88;box-shadow:0 0 6px #00ff88;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(370px,1fr));gap:18px;max-width:1600px;margin:0 auto}
 .card{background:linear-gradient(145deg,#0e1628,#111d38);border-radius:16px;padding:18px;border:1px solid #1e2d5a;transition:transform .2s,box-shadow .2s}
 .card:hover{transform:translateY(-4px);box-shadow:0 14px 44px rgba(0,80,255,.14)}
@@ -21,7 +26,9 @@ body{background:#060912;color:#dde6ff;font-family:'Segoe UI',-apple-system,sans-
 .sc2{font-size:.72rem;color:#5568a0;margin-top:2px}
 .circle{width:66px;height:66px;border-radius:50%;border:3px solid;display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0}
 .cn2{font-size:1.4rem;font-weight:800;line-height:1}.cl{font-size:.5rem;letter-spacing:1.2px;opacity:.65;margin-top:2px}
-.pr{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}.cp{font-size:1.35rem;font-weight:700;color:#fff}
+.pr{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}.cp{font-size:1.35rem;font-weight:700;color:#fff;transition:color .3s}
+.price-flash{animation:flash .6s ease}
+@keyframes flash{0%{opacity:.3}100%{opacity:1}}
 .badges{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;min-height:24px}
 .badge{padding:3px 8px;border-radius:6px;font-size:.7rem;font-weight:600}
 .badge.g{background:rgba(0,255,136,.13);color:#00ff88;border:1px solid rgba(0,255,136,.28)}
@@ -46,54 +53,58 @@ body{background:#060912;color:#dde6ff;font-family:'Segoe UI',-apple-system,sans-
 <div class="hdr">
   <h1>📊 Stock Scanner</h1>
   <div class="sub">Top 4 picks · Technical 30% · Momentum 20% · Volume 20% · Fundamentals 15% · Short Interest 15%</div>
-  <div class="ts">Generated: 2026-06-03  18:14:05</div>
+  <div class="ts">Scan: 2026-06-03  19:11:44</div>
+  <div class="live-bar">
+    <span class="live-dot" id="live-dot"></span>
+    <span id="live-ind">Connecting…</span>
+  </div>
 </div>
-<div class="grid">
-  <div class="card gold-border">
+<div class="grid" id="grid">
+  <div class="card gold-border" data-score="85.00" data-ticker="NVDA">
     <div class="ch">
       <div class="rb">#1</div>
       <div class="ti">
-        <div class="tk">TEST</div>
+        <div class="tk">NVDA</div>
         <div class="cn">Fake Corp</div>
         <div class="sc2">Technology · $45.0B</div>
       </div>
-      <div class="circle" style="border-color:#ffd700;color:#ffd700">
-        <div class="cn2">72</div>
+      <div class="circle" style="border-color:#00ff88;color:#00ff88">
+        <div class="cn2">85</div>
         <div class="cl">SCORE</div>
       </div>
     </div>
     <div class="pr">
-      <span class="cp">$121.15</span>
-      <span style="color:#00ff88;font-size:.85rem;font-weight:600">+0.0% today</span>
-      <span style="color:#ff4466;font-size:.85rem;margin-left:8px">-1.0% 1W</span>
+      <span class="cp" id="p-NVDA">$109.85</span>
+      <span id="c-NVDA" style="color:#00ff88;font-size:.85rem;font-weight:600">+0.0% today</span>
+      <span id="w-NVDA" style="color:#00ff88;font-size:.85rem;margin-left:8px">+4.8% 1W</span>
     </div>
     <div class="badges"><span class="badge g">Above 20MA</span><span class="badge g">Above 50MA</span><span class="badge g">Above 200MA</span></div>
-    <div class="mg"><div class="m"><span class="ml">RSI 14</span><span class="mv" style="color:#00ff88">49.3</span></div><div class="m"><span class="ml">Rel. Vol</span><span class="mv" style="color:#ff9944">0.79x</span></div><div class="m"><span class="ml">1-Day</span><span class="mv" style="color:#00ff88">+0.0%</span></div><div class="m"><span class="ml">1-Week</span><span class="mv" style="color:#ff4466">-1.0%</span></div><div class="m"><span class="ml">1-Month</span><span class="mv" style="color:#00ff88">+0.6%</span></div><div class="m"><span class="ml">3-Month</span><span class="mv" style="color:#00ff88">+19.3%</span></div><div class="m"><span class="ml">Short Float</span><span class="mv">4.0%</span></div><div class="m"><span class="ml">Days Cover</span><span class="mv">2.1d</span></div><div class="m"><span class="ml">P/E</span><span class="mv">22.5</span></div></div>
-    <div class="breakdown"><div class="bt">Score Breakdown</div><div class="sr"><span class="sl">Technical</span><div class="sb-wrap"><div class="sb" style="width:72%;background:#ffd700"></div></div><span class="sv" style="color:#ffd700">72</span></div><div class="sr"><span class="sl">Momentum</span><div class="sb-wrap"><div class="sb" style="width:40%;background:#ff9944"></div></div><span class="sv" style="color:#ff9944">40</span></div><div class="sr"><span class="sl">Volume</span><div class="sb-wrap"><div class="sb" style="width:44%;background:#ff9944"></div></div><span class="sv" style="color:#ff9944">44</span></div><div class="sr"><span class="sl">Fundamentals</span><div class="sb-wrap"><div class="sb" style="width:78%;background:#00ff88"></div></div><span class="sv" style="color:#00ff88">78</span></div><div class="sr"><span class="sl">Short Interest</span><div class="sb-wrap"><div class="sb" style="width:78%;background:#00ff88"></div></div><span class="sv" style="color:#00ff88">78</span></div></div>
+    <div class="mg"><div class="m"><span class="ml">RSI 14</span><span class="mv" style="color:#ffd700">66.2</span></div><div class="m"><span class="ml">Rel. Vol</span><span class="mv" style="color:#ff9944">1.31x</span></div><div class="m"><span class="ml">1-Day</span><span class="mv" style="color:#00ff88">+0.0%</span></div><div class="m"><span class="ml">1-Week</span><span class="mv" style="color:#00ff88">+4.8%</span></div><div class="m"><span class="ml">1-Month</span><span class="mv" style="color:#ff4466">-0.6%</span></div><div class="m"><span class="ml">3-Month</span><span class="mv" style="color:#00ff88">+11.2%</span></div><div class="m"><span class="ml">Short Float</span><span class="mv">4.0%</span></div><div class="m"><span class="ml">Days Cover</span><span class="mv">2.1d</span></div><div class="m"><span class="ml">P/E</span><span class="mv">22.5</span></div></div>
+    <div class="breakdown"><div class="bt">Score Breakdown</div><div class="sr"><span class="sl">Technical</span><div class="sb-wrap"><div class="sb" style="width:68%;background:#ffd700"></div></div><span class="sv" style="color:#ffd700">68</span></div><div class="sr"><span class="sl">Momentum</span><div class="sb-wrap"><div class="sb" style="width:55%;background:#ffd700"></div></div><span class="sv" style="color:#ffd700">55</span></div><div class="sr"><span class="sl">Volume</span><div class="sb-wrap"><div class="sb" style="width:53%;background:#ff9944"></div></div><span class="sv" style="color:#ff9944">53</span></div><div class="sr"><span class="sl">Fundamentals</span><div class="sb-wrap"><div class="sb" style="width:78%;background:#00ff88"></div></div><span class="sv" style="color:#00ff88">78</span></div><div class="sr"><span class="sl">Short Interest</span><div class="sb-wrap"><div class="sb" style="width:78%;background:#00ff88"></div></div><span class="sv" style="color:#00ff88">78</span></div></div>
   </div>
-  <div class="card ">
+  <div class="card " data-score="78.30" data-ticker="AAPL">
     <div class="ch">
       <div class="rb">#2</div>
       <div class="ti">
-        <div class="tk">TEST</div>
+        <div class="tk">AAPL</div>
         <div class="cn">Fake Corp</div>
         <div class="sc2">Technology · $45.0B</div>
       </div>
-      <div class="circle" style="border-color:#ffd700;color:#ffd700">
-        <div class="cn2">72</div>
+      <div class="circle" style="border-color:#00ff88;color:#00ff88">
+        <div class="cn2">78</div>
         <div class="cl">SCORE</div>
       </div>
     </div>
     <div class="pr">
-      <span class="cp">$121.15</span>
-      <span style="color:#00ff88;font-size:.85rem;font-weight:600">+0.0% today</span>
-      <span style="color:#ff4466;font-size:.85rem;margin-left:8px">-1.0% 1W</span>
+      <span class="cp" id="p-AAPL">$109.85</span>
+      <span id="c-AAPL" style="color:#00ff88;font-size:.85rem;font-weight:600">+0.0% today</span>
+      <span id="w-AAPL" style="color:#00ff88;font-size:.85rem;margin-left:8px">+4.8% 1W</span>
     </div>
     <div class="badges"><span class="badge g">Above 20MA</span><span class="badge g">Above 50MA</span><span class="badge g">Above 200MA</span></div>
-    <div class="mg"><div class="m"><span class="ml">RSI 14</span><span class="mv" style="color:#00ff88">49.3</span></div><div class="m"><span class="ml">Rel. Vol</span><span class="mv" style="color:#ff9944">0.79x</span></div><div class="m"><span class="ml">1-Day</span><span class="mv" style="color:#00ff88">+0.0%</span></div><div class="m"><span class="ml">1-Week</span><span class="mv" style="color:#ff4466">-1.0%</span></div><div class="m"><span class="ml">1-Month</span><span class="mv" style="color:#00ff88">+0.6%</span></div><div class="m"><span class="ml">3-Month</span><span class="mv" style="color:#00ff88">+19.3%</span></div><div class="m"><span class="ml">Short Float</span><span class="mv">4.0%</span></div><div class="m"><span class="ml">Days Cover</span><span class="mv">2.1d</span></div><div class="m"><span class="ml">P/E</span><span class="mv">22.5</span></div></div>
-    <div class="breakdown"><div class="bt">Score Breakdown</div><div class="sr"><span class="sl">Technical</span><div class="sb-wrap"><div class="sb" style="width:72%;background:#ffd700"></div></div><span class="sv" style="color:#ffd700">72</span></div><div class="sr"><span class="sl">Momentum</span><div class="sb-wrap"><div class="sb" style="width:40%;background:#ff9944"></div></div><span class="sv" style="color:#ff9944">40</span></div><div class="sr"><span class="sl">Volume</span><div class="sb-wrap"><div class="sb" style="width:44%;background:#ff9944"></div></div><span class="sv" style="color:#ff9944">44</span></div><div class="sr"><span class="sl">Fundamentals</span><div class="sb-wrap"><div class="sb" style="width:78%;background:#00ff88"></div></div><span class="sv" style="color:#00ff88">78</span></div><div class="sr"><span class="sl">Short Interest</span><div class="sb-wrap"><div class="sb" style="width:78%;background:#00ff88"></div></div><span class="sv" style="color:#00ff88">78</span></div></div>
+    <div class="mg"><div class="m"><span class="ml">RSI 14</span><span class="mv" style="color:#ffd700">66.2</span></div><div class="m"><span class="ml">Rel. Vol</span><span class="mv" style="color:#ff9944">1.31x</span></div><div class="m"><span class="ml">1-Day</span><span class="mv" style="color:#00ff88">+0.0%</span></div><div class="m"><span class="ml">1-Week</span><span class="mv" style="color:#00ff88">+4.8%</span></div><div class="m"><span class="ml">1-Month</span><span class="mv" style="color:#ff4466">-0.6%</span></div><div class="m"><span class="ml">3-Month</span><span class="mv" style="color:#00ff88">+11.2%</span></div><div class="m"><span class="ml">Short Float</span><span class="mv">4.0%</span></div><div class="m"><span class="ml">Days Cover</span><span class="mv">2.1d</span></div><div class="m"><span class="ml">P/E</span><span class="mv">22.5</span></div></div>
+    <div class="breakdown"><div class="bt">Score Breakdown</div><div class="sr"><span class="sl">Technical</span><div class="sb-wrap"><div class="sb" style="width:68%;background:#ffd700"></div></div><span class="sv" style="color:#ffd700">68</span></div><div class="sr"><span class="sl">Momentum</span><div class="sb-wrap"><div class="sb" style="width:55%;background:#ffd700"></div></div><span class="sv" style="color:#ffd700">55</span></div><div class="sr"><span class="sl">Volume</span><div class="sb-wrap"><div class="sb" style="width:53%;background:#ff9944"></div></div><span class="sv" style="color:#ff9944">53</span></div><div class="sr"><span class="sl">Fundamentals</span><div class="sb-wrap"><div class="sb" style="width:78%;background:#00ff88"></div></div><span class="sv" style="color:#00ff88">78</span></div><div class="sr"><span class="sl">Short Interest</span><div class="sb-wrap"><div class="sb" style="width:78%;background:#00ff88"></div></div><span class="sv" style="color:#00ff88">78</span></div></div>
   </div>
-  <div class="card ">
+  <div class="card " data-score="72.40" data-ticker="TEST">
     <div class="ch">
       <div class="rb">#3</div>
       <div class="ti">
@@ -107,38 +118,94 @@ body{background:#060912;color:#dde6ff;font-family:'Segoe UI',-apple-system,sans-
       </div>
     </div>
     <div class="pr">
-      <span class="cp">$121.15</span>
-      <span style="color:#00ff88;font-size:.85rem;font-weight:600">+0.0% today</span>
-      <span style="color:#ff4466;font-size:.85rem;margin-left:8px">-1.0% 1W</span>
+      <span class="cp" id="p-TEST">$109.85</span>
+      <span id="c-TEST" style="color:#00ff88;font-size:.85rem;font-weight:600">+0.0% today</span>
+      <span id="w-TEST" style="color:#00ff88;font-size:.85rem;margin-left:8px">+4.8% 1W</span>
     </div>
     <div class="badges"><span class="badge g">Above 20MA</span><span class="badge g">Above 50MA</span><span class="badge g">Above 200MA</span></div>
-    <div class="mg"><div class="m"><span class="ml">RSI 14</span><span class="mv" style="color:#00ff88">49.3</span></div><div class="m"><span class="ml">Rel. Vol</span><span class="mv" style="color:#ff9944">0.79x</span></div><div class="m"><span class="ml">1-Day</span><span class="mv" style="color:#00ff88">+0.0%</span></div><div class="m"><span class="ml">1-Week</span><span class="mv" style="color:#ff4466">-1.0%</span></div><div class="m"><span class="ml">1-Month</span><span class="mv" style="color:#00ff88">+0.6%</span></div><div class="m"><span class="ml">3-Month</span><span class="mv" style="color:#00ff88">+19.3%</span></div><div class="m"><span class="ml">Short Float</span><span class="mv">4.0%</span></div><div class="m"><span class="ml">Days Cover</span><span class="mv">2.1d</span></div><div class="m"><span class="ml">P/E</span><span class="mv">22.5</span></div></div>
-    <div class="breakdown"><div class="bt">Score Breakdown</div><div class="sr"><span class="sl">Technical</span><div class="sb-wrap"><div class="sb" style="width:72%;background:#ffd700"></div></div><span class="sv" style="color:#ffd700">72</span></div><div class="sr"><span class="sl">Momentum</span><div class="sb-wrap"><div class="sb" style="width:40%;background:#ff9944"></div></div><span class="sv" style="color:#ff9944">40</span></div><div class="sr"><span class="sl">Volume</span><div class="sb-wrap"><div class="sb" style="width:44%;background:#ff9944"></div></div><span class="sv" style="color:#ff9944">44</span></div><div class="sr"><span class="sl">Fundamentals</span><div class="sb-wrap"><div class="sb" style="width:78%;background:#00ff88"></div></div><span class="sv" style="color:#00ff88">78</span></div><div class="sr"><span class="sl">Short Interest</span><div class="sb-wrap"><div class="sb" style="width:78%;background:#00ff88"></div></div><span class="sv" style="color:#00ff88">78</span></div></div>
+    <div class="mg"><div class="m"><span class="ml">RSI 14</span><span class="mv" style="color:#ffd700">66.2</span></div><div class="m"><span class="ml">Rel. Vol</span><span class="mv" style="color:#ff9944">1.31x</span></div><div class="m"><span class="ml">1-Day</span><span class="mv" style="color:#00ff88">+0.0%</span></div><div class="m"><span class="ml">1-Week</span><span class="mv" style="color:#00ff88">+4.8%</span></div><div class="m"><span class="ml">1-Month</span><span class="mv" style="color:#ff4466">-0.6%</span></div><div class="m"><span class="ml">3-Month</span><span class="mv" style="color:#00ff88">+11.2%</span></div><div class="m"><span class="ml">Short Float</span><span class="mv">4.0%</span></div><div class="m"><span class="ml">Days Cover</span><span class="mv">2.1d</span></div><div class="m"><span class="ml">P/E</span><span class="mv">22.5</span></div></div>
+    <div class="breakdown"><div class="bt">Score Breakdown</div><div class="sr"><span class="sl">Technical</span><div class="sb-wrap"><div class="sb" style="width:68%;background:#ffd700"></div></div><span class="sv" style="color:#ffd700">68</span></div><div class="sr"><span class="sl">Momentum</span><div class="sb-wrap"><div class="sb" style="width:55%;background:#ffd700"></div></div><span class="sv" style="color:#ffd700">55</span></div><div class="sr"><span class="sl">Volume</span><div class="sb-wrap"><div class="sb" style="width:53%;background:#ff9944"></div></div><span class="sv" style="color:#ff9944">53</span></div><div class="sr"><span class="sl">Fundamentals</span><div class="sb-wrap"><div class="sb" style="width:78%;background:#00ff88"></div></div><span class="sv" style="color:#00ff88">78</span></div><div class="sr"><span class="sl">Short Interest</span><div class="sb-wrap"><div class="sb" style="width:78%;background:#00ff88"></div></div><span class="sv" style="color:#00ff88">78</span></div></div>
   </div>
-  <div class="card ">
+  <div class="card " data-score="61.10" data-ticker="META">
     <div class="ch">
       <div class="rb">#4</div>
       <div class="ti">
-        <div class="tk">TEST</div>
+        <div class="tk">META</div>
         <div class="cn">Fake Corp</div>
         <div class="sc2">Technology · $45.0B</div>
       </div>
       <div class="circle" style="border-color:#ffd700;color:#ffd700">
-        <div class="cn2">72</div>
+        <div class="cn2">61</div>
         <div class="cl">SCORE</div>
       </div>
     </div>
     <div class="pr">
-      <span class="cp">$121.15</span>
-      <span style="color:#00ff88;font-size:.85rem;font-weight:600">+0.0% today</span>
-      <span style="color:#ff4466;font-size:.85rem;margin-left:8px">-1.0% 1W</span>
+      <span class="cp" id="p-META">$109.85</span>
+      <span id="c-META" style="color:#00ff88;font-size:.85rem;font-weight:600">+0.0% today</span>
+      <span id="w-META" style="color:#00ff88;font-size:.85rem;margin-left:8px">+4.8% 1W</span>
     </div>
     <div class="badges"><span class="badge g">Above 20MA</span><span class="badge g">Above 50MA</span><span class="badge g">Above 200MA</span></div>
-    <div class="mg"><div class="m"><span class="ml">RSI 14</span><span class="mv" style="color:#00ff88">49.3</span></div><div class="m"><span class="ml">Rel. Vol</span><span class="mv" style="color:#ff9944">0.79x</span></div><div class="m"><span class="ml">1-Day</span><span class="mv" style="color:#00ff88">+0.0%</span></div><div class="m"><span class="ml">1-Week</span><span class="mv" style="color:#ff4466">-1.0%</span></div><div class="m"><span class="ml">1-Month</span><span class="mv" style="color:#00ff88">+0.6%</span></div><div class="m"><span class="ml">3-Month</span><span class="mv" style="color:#00ff88">+19.3%</span></div><div class="m"><span class="ml">Short Float</span><span class="mv">4.0%</span></div><div class="m"><span class="ml">Days Cover</span><span class="mv">2.1d</span></div><div class="m"><span class="ml">P/E</span><span class="mv">22.5</span></div></div>
-    <div class="breakdown"><div class="bt">Score Breakdown</div><div class="sr"><span class="sl">Technical</span><div class="sb-wrap"><div class="sb" style="width:72%;background:#ffd700"></div></div><span class="sv" style="color:#ffd700">72</span></div><div class="sr"><span class="sl">Momentum</span><div class="sb-wrap"><div class="sb" style="width:40%;background:#ff9944"></div></div><span class="sv" style="color:#ff9944">40</span></div><div class="sr"><span class="sl">Volume</span><div class="sb-wrap"><div class="sb" style="width:44%;background:#ff9944"></div></div><span class="sv" style="color:#ff9944">44</span></div><div class="sr"><span class="sl">Fundamentals</span><div class="sb-wrap"><div class="sb" style="width:78%;background:#00ff88"></div></div><span class="sv" style="color:#00ff88">78</span></div><div class="sr"><span class="sl">Short Interest</span><div class="sb-wrap"><div class="sb" style="width:78%;background:#00ff88"></div></div><span class="sv" style="color:#00ff88">78</span></div></div>
+    <div class="mg"><div class="m"><span class="ml">RSI 14</span><span class="mv" style="color:#ffd700">66.2</span></div><div class="m"><span class="ml">Rel. Vol</span><span class="mv" style="color:#ff9944">1.31x</span></div><div class="m"><span class="ml">1-Day</span><span class="mv" style="color:#00ff88">+0.0%</span></div><div class="m"><span class="ml">1-Week</span><span class="mv" style="color:#00ff88">+4.8%</span></div><div class="m"><span class="ml">1-Month</span><span class="mv" style="color:#ff4466">-0.6%</span></div><div class="m"><span class="ml">3-Month</span><span class="mv" style="color:#00ff88">+11.2%</span></div><div class="m"><span class="ml">Short Float</span><span class="mv">4.0%</span></div><div class="m"><span class="ml">Days Cover</span><span class="mv">2.1d</span></div><div class="m"><span class="ml">P/E</span><span class="mv">22.5</span></div></div>
+    <div class="breakdown"><div class="bt">Score Breakdown</div><div class="sr"><span class="sl">Technical</span><div class="sb-wrap"><div class="sb" style="width:68%;background:#ffd700"></div></div><span class="sv" style="color:#ffd700">68</span></div><div class="sr"><span class="sl">Momentum</span><div class="sb-wrap"><div class="sb" style="width:55%;background:#ffd700"></div></div><span class="sv" style="color:#ffd700">55</span></div><div class="sr"><span class="sl">Volume</span><div class="sb-wrap"><div class="sb" style="width:53%;background:#ff9944"></div></div><span class="sv" style="color:#ff9944">53</span></div><div class="sr"><span class="sl">Fundamentals</span><div class="sb-wrap"><div class="sb" style="width:78%;background:#00ff88"></div></div><span class="sv" style="color:#00ff88">78</span></div><div class="sr"><span class="sl">Short Interest</span><div class="sb-wrap"><div class="sb" style="width:78%;background:#00ff88"></div></div><span class="sv" style="color:#00ff88">78</span></div></div>
   </div></div>
 <div class="ft">
   <p>⚠️ For informational purposes only – not financial advice.</p>
-  <p>Data: Yahoo Finance · Finviz &nbsp;|&nbsp; Universe: finviz (60 stocks)</p>
+  <p>Data: Yahoo Finance · Finviz &nbsp;|&nbsp; Universe: finviz (60 stocks scanned)</p>
 </div>
+
+<script>
+(function(){
+  const PORT    = 18723;
+  const SYMBOLS = ["NVDA", "AAPL", "TEST", "META"];
+  const dot     = document.getElementById('live-dot');
+  const ind     = document.getElementById('live-ind');
+  let   prevPrices = {};
+
+  function fmt(n, d=2){ return n >= 0 ? '+'+n.toFixed(d)+'%' : n.toFixed(d)+'%'; }
+
+  function flash(el){
+    el.classList.remove('price-flash');
+    void el.offsetWidth;
+    el.classList.add('price-flash');
+  }
+
+  function update(){
+    fetch('http://localhost:'+PORT+'/prices?symbols='+SYMBOLS.join(','))
+      .then(r => r.json())
+      .then(data => {
+        dot.className = 'live-dot on';
+        ind.textContent = '🟢 Live · ' + new Date().toLocaleTimeString();
+
+        Object.entries(data).forEach(([sym, info]) => {
+          // Price
+          const pe = document.getElementById('p-'+sym);
+          if (pe && info.price !== undefined) {
+            const newTxt = '$' + info.price.toFixed(2);
+            if (pe.textContent !== newTxt) { pe.textContent = newTxt; flash(pe); }
+          }
+          // Today's change %
+          const ce = document.getElementById('c-'+sym);
+          if (ce && info.change_pct !== undefined) {
+            const pct = info.change_pct;
+            ce.textContent = fmt(pct) + ' today';
+            ce.style.color = pct >= 0 ? '#00ff88' : '#ff4466';
+          }
+        });
+      })
+      .catch(() => {
+        dot.className = 'live-dot';
+        ind.textContent = '⚫ Offline – prices from last scan';
+      });
+  }
+
+  // Sort cards by data-score descending (belt-and-suspenders)
+  const grid  = document.getElementById('grid');
+  const cards = [...grid.querySelectorAll('.card')];
+  cards.sort((a,b) => parseFloat(b.dataset.score) - parseFloat(a.dataset.score));
+  cards.forEach(c => grid.appendChild(c));
+
+  setInterval(update, 3000);
+  setTimeout(update, 800);
+})();
+</script>
 </body></html>

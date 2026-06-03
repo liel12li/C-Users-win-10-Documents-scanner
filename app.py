@@ -582,6 +582,15 @@ class App:
 
         self._scanning = False
         self._log_handler: logging.Handler | None = None
+
+        # Start the live price server in the background
+        try:
+            from scanner import start_price_server, PRICE_PORT
+            ok = start_price_server()
+            self._server_port = PRICE_PORT if ok else None
+        except Exception:
+            self._server_port = None
+
         self._build()
 
     # ── Layout ────────────────────────────────────────────────────────────────
@@ -694,6 +703,14 @@ class App:
 
             if top:
                 generate_dashboard(top)
+                # Pre-populate live price cache with scan data
+                try:
+                    from scanner import prefill_price_cache, _background_refresh
+                    prefill_price_cache(top)
+                    syms = [s["ticker"] for s in top]
+                    threading.Thread(target=_background_refresh, args=(syms,), daemon=True).start()
+                except Exception:
+                    pass
                 self.root.after(0, self._done_ok)
             elif sc._cancel.is_set():
                 self.root.after(0, self._done_cancelled)
