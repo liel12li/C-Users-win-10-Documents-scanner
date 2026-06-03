@@ -83,19 +83,196 @@ def _spin(parent, var, lo, hi, step=1, width=8):
                       bg=BG3, fg=TEXT, insertbackground=TEXT,
                       buttonbackground=BG2, relief="flat")
 
-def _row(frame, label, widget_fn, pady=5):
+def _row(frame, label, widget_fn, pady=5, tip=None):
     f = tk.Frame(frame, bg=BG)
     f.pack(fill="x", padx=18, pady=pady)
     _lbl(f, label, width=26).pack(side="left")
     w = widget_fn(f)
     w.pack(side="left")
+    if tip:
+        _help_btn(f, label, tip).pack(side="left", padx=6)
     return w
 
-def _section(parent, title):
+def _section(parent, title, tip=None):
     f = tk.Frame(parent, bg=BG)
     f.pack(fill="x", padx=10, pady=(10, 2))
-    _lbl(f, f"── {title} ──", size=9, color="#3d5488", bg=BG).pack(anchor="w", padx=8)
+    inner = tk.Frame(f, bg=BG)
+    inner.pack(anchor="w", padx=8)
+    _lbl(inner, f"── {title} ──", size=9, color="#3d5488", bg=BG).pack(side="left")
+    if tip:
+        _help_btn(inner, title, tip).pack(side="left", padx=4)
     return f
+
+
+# ── Tooltip texts (Hebrew) ────────────────────────────────────────────────────
+_TIPS = {
+    "Universe": (
+        "מאיפה הסורק לוקח את רשימת המניות לבדיקה\n\n"
+        "• Finviz – שולח שאילתה לאתר Finviz ומחזיר מניות שעוברות פילטר ראשוני\n"
+        "• Nasdaq 100 – 100 המניות הגדולות בנאסד\"ק\n"
+        "• S&P 500 – 500 המניות הגדולות בארה\"ב\n"
+        "• Custom – רשימה ידנית שאתה מגדיר ב-config.py"
+    ),
+    "Max stocks to scan": (
+        "כמה מניות הסורק יבדוק בכל ריצה\n\n"
+        "יותר מניות = תוצאות מדויקות יותר, אבל לוקח יותר זמן.\n"
+        "50–80 מניות מומלץ לאיזון בין מהירות לכיסוי."
+    ),
+    "Top results to show": (
+        "כמה מניות יוצגו בדשבורד הסופי\n\n"
+        "הסורק מחשב ציון לכל המניות, ומציג רק את הטובות ביותר.\n"
+        "ברירת מחדל: 4"
+    ),
+    "Market Cap": (
+        "שווי שוק (Market Cap) = מחיר המניה × מספר המניות בשוק\n\n"
+        "• Mega – מעל $200B  (Apple, Microsoft וכו')\n"
+        "• Large – $10B–$200B  (חברות גדולות ויציבות)\n"
+        "• Mid   – $2B–$10B   (חברות בינוניות, פוטנציאל צמיחה)\n"
+        "• Small – $300M–$2B  (חברות קטנות, סיכון גבוה יותר)"
+    ),
+    "Average Volume": (
+        "ממוצע נפח המסחר היומי – כמה מניות נסחרות בממוצע ביום\n\n"
+        "נפח גבוה = נזילות גבוהה = קל לקנות ולמכור בלי להזיז את המחיר.\n"
+        "מומלץ: לפחות 500K ביום למניות רגילות."
+    ),
+    "RSI Range": (
+        "RSI – Relative Strength Index (מדד עוצמה יחסית), טווח 0–100\n\n"
+        "• מתחת ל-30 → מניה 'מוכרת יתר', עשויה לעלות (oversold)\n"
+        "• מעל 70    → מניה 'קנויה יתר', עשויה לרדת (overbought)\n"
+        "• 40–65     → טווח בריא, מומנטום חיובי\n\n"
+        "הסורק נותן ניקוד גבוה יותר למניות ב-RSI 40–65."
+    ),
+    "RSI minimum": (
+        "הסף התחתון של ה-RSI\n\n"
+        "מניות עם RSI מתחת לערך זה יסוננו החוצה.\n"
+        "ברירת מחדל: 20 (מסנן רק קריסות קיצוניות)"
+    ),
+    "RSI maximum": (
+        "הסף העליון של ה-RSI\n\n"
+        "מניות עם RSI מעל ערך זה יסוננו החוצה.\n"
+        "ברירת מחדל: 85 (מסנן רק קניית יתר קיצונית)"
+    ),
+    "Price Range  ($)": (
+        "טווח המחיר של המניה בדולרים\n\n"
+        "מאפשר להתמקד במניות בטווח מחיר ספציפי.\n"
+        "לדוגמה: $20–$200 לסינון מניות 'penny stocks' מחד\n"
+        "ומניות יקרות מאוד מאידך."
+    ),
+    "Volume": (
+        "נפח מסחר יחסי (Relative Volume)\n\n"
+        "= נפח המסחר היום ÷ ממוצע 20 הימים האחרונים\n\n"
+        "• 1.0x = נפח רגיל\n"
+        "• 1.5x = 50% יותר מסחר מהרגיל\n"
+        "• 3.0x+ = נפח חריג מאוד – לעיתים מסמן תנועה גדולה\n\n"
+        "נפח גבוה בימי עלייה = ביקוש חזק = אות חיובי."
+    ),
+    "Min relative volume": (
+        "הנפח היחסי המינימלי שמניה צריכה להציג כדי לעבור את הסינון\n\n"
+        "0.3 = לפחות 30% מהנפח הרגיל\n"
+        "1.0 = לפחות נפח ממוצע\n"
+        "1.5 = לפחות 50% מעל הממוצע (מסנן יותר)"
+    ),
+    "Market Cap": (
+        "שווי שוק מינימלי בביליוני דולר\n\n"
+        "0 = ללא הגבלה\n"
+        "1 = לפחות $1B (מסנן חברות קטנות מאוד)\n"
+        "10 = לפחות $10B (רק חברות גדולות)"
+    ),
+    "Technical (RSI / MACD / MA)": (
+        "ניתוח טכני (Technical Analysis)\n\n"
+        "בוחן את תנועת המחיר בגרפים. כולל:\n"
+        "• RSI – מדד עוצמה יחסית\n"
+        "• MACD – מדד מגמה ותנע (Crossover = אות קנייה)\n"
+        "• MA – ממוצעים נעים (20/50/200 יום)\n\n"
+        "משקל גבוה = הסורק מעדיף מניות עם גרף טכני חזק."
+    ),
+    "Momentum  (price returns)": (
+        "מומנטום (Momentum) – עוצמת מגמת העלייה לאורך זמן\n\n"
+        "מחושב מהתשואה ב-4 מסגרות זמן:\n"
+        "• 1 יום  (משקל 10%)\n"
+        "• שבוע   (משקל 20%)\n"
+        "• חודש   (משקל 30%)\n"
+        "• 3 חודשים (משקל 40%)\n\n"
+        "משקל גבוה = הסורק מעדיף מניות שעולות לאורך זמן."
+    ),
+    "Volume  (relative volume)": (
+        "נפח מסחר (Volume)\n\n"
+        "מחושב מ-3 אלמנטים:\n"
+        "• נפח יחסי (50%) – האם היום נסחר יותר מהרגיל?\n"
+        "• מגמת נפח (30%) – האם הנפח עולה בימים האחרונים?\n"
+        "• יחס מחיר-נפח (20%) – האם הנפח גבוה בימי עלייה?\n\n"
+        "משקל גבוה = הסורק מעדיף מניות עם נפח מסחר חריג."
+    ),
+    "Fundamentals  (P/E, EPS…)": (
+        "פונדמנטלים (Fundamentals) – ביצועים פיננסיים\n\n"
+        "• P/E – מכפיל רווח (מחיר ÷ רווח למניה). נמוך = זול יותר.\n"
+        "• EPS Growth – צמיחת הרווח למניה\n"
+        "• Revenue Growth – צמיחת ההכנסות\n"
+        "• Profit Margin – מרווח הרווח הנקי\n\n"
+        "משקל גבוה = הסורק מעדיף חברות רווחיות וצומחות."
+    ),
+    "Short Interest": (
+        "שורט (Short Interest) – אחוז המניות הממורות (שורט)\n\n"
+        "שורט = השקעה שמרוויחה כשהמניה יורדת.\n\n"
+        "• שורט נמוך (<5%) = אין לחץ מכירה, סימן חיובי\n"
+        "• שורט גבוה (>20%) = הרבה 'מהמרים' נגד המניה\n\n"
+        "משקל גבוה = הסורק מעדיף מניות עם שורט נמוך.\n"
+        "Short Ratio = ימים שייקח לסגור את כל השורטים."
+    ),
+    "Sector Filter  (leave empty = all sectors)": (
+        "סינון לפי ענף (Sector)\n\n"
+        "אם לא בוחרים כלום – הסורק בודק את כל הענפים.\n"
+        "אם בוחרים ענפים ספציפיים – רק מניות מאותם ענפים\n"
+        "ייכנסו לסריקה.\n\n"
+        "לדוגמה: לבחור רק Technology + Healthcare."
+    ),
+    "Min market cap ($B)": (
+        "שווי שוק מינימלי בביליוני דולר ($B)\n\n"
+        "0 = ללא הגבלה\n"
+        "1 = לפחות $1B\n"
+        "10 = לפחות $10B (רק חברות גדולות)"
+    ),
+    "Scoring Weights  (higher = more influence)": (
+        "משקלות הציון (Weights)\n\n"
+        "כל מניה מקבלת ציון מורכב (0–100) שמחושב\n"
+        "כממוצע משוקלל של 5 פקטורים.\n\n"
+        "הגדל את המשקל של הפקטורים שחשובים לך יותר.\n"
+        "המשקלות מנורמלות אוטומטית ל-100% בשמירה."
+    ),
+}
+
+def _help_btn(parent, key: str, tip: str) -> tk.Button:
+    """Small '?' button that opens a Hebrew explanation popup."""
+    def _show():
+        win = tk.Toplevel()
+        win.title("הסבר")
+        win.configure(bg=BG2)
+        win.resizable(False, False)
+        win.grab_set()
+        # Force right-to-left friendly display
+        tk.Label(win, text=key, font=("Segoe UI", 13, "bold"),
+                 bg=BG2, fg=ACCENT, justify="right").pack(padx=24, pady=(18, 6))
+        tk.Frame(win, bg=BG3, height=1).pack(fill="x", padx=20)
+        tk.Label(win, text=tip, font=("Segoe UI", 10),
+                 bg=BG2, fg=TEXT, justify="right",
+                 wraplength=360, anchor="e").pack(padx=24, pady=12)
+        tk.Button(win, text="סגור ✕",
+                  font=("Segoe UI", 10), bg=BG3, fg=TEXT,
+                  activebackground=BG, relief="flat",
+                  padx=16, pady=6, cursor="hand2",
+                  command=win.destroy).pack(pady=(0, 16))
+        win.update_idletasks()
+        # Centre relative to screen
+        w, h = win.winfo_width(), win.winfo_height()
+        sw = win.winfo_screenwidth(); sh = win.winfo_screenheight()
+        win.geometry(f"+{(sw-w)//2}+{(sh-h)//2}")
+
+    return tk.Button(parent, text="?",
+                     font=("Segoe UI", 8, "bold"),
+                     bg=BG3, fg=MUTED,
+                     activebackground=ACCENT, activeforeground="white",
+                     relief="flat", width=2, padx=0, pady=1,
+                     cursor="hand2", command=_show)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -157,13 +334,16 @@ class SettingsWindow(tk.Toplevel):
 
         self.universe_var = tk.StringVar(value=self.cfg["universe_method"])
         _row(tab, "Universe", lambda f: _combo(f, self.universe_var,
-             ["finviz", "nasdaq100", "sp500", "custom"]))
+             ["finviz", "nasdaq100", "sp500", "custom"]),
+             tip=_TIPS["Universe"])
 
         self.maxstocks_var = tk.IntVar(value=self.cfg["max_stocks"])
-        _row(tab, "Max stocks to scan", lambda f: _spin(f, self.maxstocks_var, 10, 500, 10))
+        _row(tab, "Max stocks to scan", lambda f: _spin(f, self.maxstocks_var, 10, 500, 10),
+             tip=_TIPS["Max stocks to scan"])
 
         self.topn_var = tk.IntVar(value=self.cfg["top_n"])
-        _row(tab, "Top results to show", lambda f: _spin(f, self.topn_var, 1, 10))
+        _row(tab, "Top results to show", lambda f: _spin(f, self.topn_var, 1, 10),
+             tip=_TIPS["Top results to show"])
 
         _section(tab, "Finviz Pre-Filter")
 
@@ -173,14 +353,15 @@ class SettingsWindow(tk.Toplevel):
             "Large ($10bln to $200bln)",
             "Mid ($2bln to $10bln)",
             "Small ($300mln to $2bln)",
-        ]))
+        ]), tip=_TIPS["Market Cap"])
 
         self.avgvol_var = tk.StringVar(value=self.cfg["finviz_filters"].get("Average Volume", "Over 500K"))
         _row(tab, "Average Volume", lambda f: _combo(f, self.avgvol_var, [
             "Over 100K", "Over 200K", "Over 500K", "Over 1M", "Over 2M",
-        ]))
+        ]), tip=_TIPS["Average Volume"])
 
-        _section(tab, "Sector Filter (leave empty = all sectors)")
+        _section(tab, "Sector Filter  (leave empty = all sectors)",
+                 tip=_TIPS["Sector Filter  (leave empty = all sectors)"])
         f = tk.Frame(tab, bg=BG)
         f.pack(fill="x", padx=18, pady=4)
         _lbl(f, "Only these sectors:", size=9, color=MUTED, bg=BG).pack(anchor="w")
@@ -216,14 +397,16 @@ class SettingsWindow(tk.Toplevel):
         pf = self.cfg["pre_filters"]
 
         # ── RSI ───────────────────────────────────────────────────────────────
-        _section(tab, "RSI Range")
+        _section(tab, "RSI Range", tip=_TIPS["RSI Range"])
         self.rsi_min_var = tk.DoubleVar(value=pf.get("rsi_min", 20))
         self.rsi_max_var = tk.DoubleVar(value=pf.get("rsi_max", 85))
-        _row(tab, "RSI minimum", lambda f: _spin(f, self.rsi_min_var, 0, 100))
-        _row(tab, "RSI maximum", lambda f: _spin(f, self.rsi_max_var, 0, 100))
+        _row(tab, "RSI minimum", lambda f: _spin(f, self.rsi_min_var, 0, 100),
+             tip=_TIPS["RSI minimum"])
+        _row(tab, "RSI maximum", lambda f: _spin(f, self.rsi_max_var, 0, 100),
+             tip=_TIPS["RSI maximum"])
 
         # ── Price Range ───────────────────────────────────────────────────────
-        _section(tab, "Price Range  ($)")
+        _section(tab, "Price Range  ($)", tip=_TIPS["Price Range  ($)"])
 
         self.minprice_var = tk.DoubleVar(value=pf.get("min_price", 5))
         self.maxprice_var = tk.DoubleVar(value=pf.get("max_price", 5000))
@@ -306,20 +489,23 @@ class SettingsWindow(tk.Toplevel):
         _spin(row_f, self.maxprice_var, 0, 99999, 50).pack(side="left")
 
         # ── Volume ────────────────────────────────────────────────────────────
-        _section(tab, "Volume")
+        _section(tab, "Volume", tip=_TIPS["Volume"])
         self.minrv_var = tk.DoubleVar(value=pf.get("min_rel_volume", 0.3))
-        _row(tab, "Min relative volume", lambda f: _spin(f, self.minrv_var, 0, 10, 0.1))
+        _row(tab, "Min relative volume", lambda f: _spin(f, self.minrv_var, 0, 10, 0.1),
+             tip=_TIPS["Min relative volume"])
 
         # ── Market Cap ────────────────────────────────────────────────────────
         _section(tab, "Market Cap")
         self.minmc_var = tk.StringVar(
             value=str(int(pf.get("min_market_cap", 0) / 1e9)) if pf.get("min_market_cap") else "0"
         )
-        _row(tab, "Min market cap ($B)", lambda f: _spin(f, self.minmc_var, 0, 10000, 1))
+        _row(tab, "Min market cap ($B)", lambda f: _spin(f, self.minmc_var, 0, 10000, 1),
+             tip=_TIPS["Min market cap ($B)"])
 
     # ── Tab 3: Weights ────────────────────────────────────────────────────────
     def _build_weights_tab(self, tab):
-        _section(tab, "Scoring Weights  (higher = more influence)")
+        _section(tab, "Scoring Weights  (higher = more influence)",
+                 tip=_TIPS["Scoring Weights  (higher = more influence)"])
         self.weight_vars: dict[str, tk.IntVar] = {}
         labels = {
             "technical":      "Technical (RSI / MACD / MA)",
@@ -343,6 +529,8 @@ class SettingsWindow(tk.Toplevel):
             tk.Label(f, textvariable=var, width=3, font=("Segoe UI", 9),
                      bg=BG, fg=ACCENT).pack(side="left")
             tk.Label(f, text="%", font=("Segoe UI", 9), bg=BG, fg=MUTED).pack(side="left")
+            if label in _TIPS:
+                _help_btn(f, label, _TIPS[label]).pack(side="left", padx=6)
 
         _lbl(tab, "Weights are auto-normalised to 100% on save.",
              size=8, color=MUTED).pack(pady=6)
