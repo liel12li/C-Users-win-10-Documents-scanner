@@ -19,7 +19,6 @@ import http.server
 import urllib.parse
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Optional
 
 import numpy as np
 import pandas as pd
